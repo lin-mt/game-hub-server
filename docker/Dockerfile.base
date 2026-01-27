@@ -1,0 +1,95 @@
+############################
+# Stage 1: build opencv 4.9.0
+############################
+FROM eclipse-temurin:21-jre-noble AS opencv-builder
+
+ARG OPENCV_VERSION=4.9.0
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
+    pkg-config \
+    unzip \
+    wget \
+    libgtk-3-dev \
+    libavcodec-dev \
+    libavformat-dev \
+    libswscale-dev \
+    libv4l-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff-dev \
+    libopenexr-dev \
+    libtbb-dev \
+    libeigen3-dev \
+    libatlas-base-dev \
+    liblapack-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt
+
+# 下载 OpenCV & opencv_contrib
+RUN wget -q https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.zip && \
+    wget -q https://github.com/opencv/opencv_contrib/archive/${OPENCV_VERSION}.zip && \
+    unzip ${OPENCV_VERSION}.zip && \
+    unzip ${OPENCV_VERSION}.zip.1
+
+WORKDIR /opt/opencv-${OPENCV_VERSION}/build
+
+RUN cmake .. \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr/local \
+    -DOPENCV_EXTRA_MODULES_PATH=/opt/opencv_contrib-${OPENCV_VERSION}/modules \
+    -DBUILD_EXAMPLES=OFF \
+    -DBUILD_TESTS=OFF \
+    -DBUILD_DOCS=OFF \
+    -DBUILD_PERF_TESTS=OFF \
+    -DBUILD_opencv_java=ON \
+    -DWITH_TBB=ON \
+    -DWITH_IPP=ON \
+    -DWITH_OPENGL=OFF \
+    -DWITH_QT=OFF \
+    -DWITH_GTK=ON \
+    -DWITH_FFMPEG=ON
+
+RUN make -j$(nproc) && make install && ldconfig
+
+############################
+# Stage 2: runtime
+############################
+FROM eclipse-temurin:21-jre-noble
+
+WORKDIR /app
+
+ENV TZ=Asia/Shanghai
+ENV SPRING_PROFILES_ACTIVE=prod
+
+# 运行时依赖（不包含编译工具）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    tesseract-ocr-chi-sim \
+    tesseract-ocr-eng \
+    libleptonica-dev \
+    libgtk-3-0 \
+    libtbb12 \
+    libjpeg-turbo8 \
+    libpng16-16 \
+    libtiff6 \
+    libopenexr-dev \
+    fonts-dejavu \
+    fonts-droid-fallback \
+    fonts-freefont-ttf \
+    tzdata \
+    ca-certificates \
+    && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
+    && echo "Asia/Shanghai" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/*
+
+
+# 拷贝 OpenCV 安装结果
+COPY --from=opencv-builder /usr/local /usr/local
+
+# 确保 Java 能找到 opencv so
+ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH:-}
