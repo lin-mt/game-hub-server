@@ -296,11 +296,11 @@ public class AllianceMemberService {
   private String translateTier(GameAccount.MemberTier tier) {
     if (tier == null) return null;
     return switch (tier) {
-      case TIER_1 -> "阶级1";
-      case TIER_2 -> "阶级2";
-      case TIER_3 -> "阶级3";
-      case TIER_4 -> "阶级4";
-      case TIER_5 -> "阶级5";
+      case TIER_1 -> "一阶";
+      case TIER_2 -> "二阶";
+      case TIER_3 -> "三阶";
+      case TIER_4 -> "四阶";
+      case TIER_5 -> "五阶";
     };
   }
 
