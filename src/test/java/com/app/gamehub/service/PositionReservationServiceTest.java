@@ -50,11 +50,11 @@ class PositionReservationServiceTest {
 
     @BeforeEach
     void setUp() {
-        // 设置通用的mock行为
+        // 设置通用的mock行为 - 使用lenient避免不必要的stubbing警告
         Dynasty dynasty = new Dynasty();
         dynasty.setId(dynastyId);
         dynasty.setEmperorId(userId);
-        when(dynastyRepository.findById(dynastyId)).thenReturn(Optional.of(dynasty));
+        lenient().when(dynastyRepository.findById(dynastyId)).thenReturn(Optional.of(dynasty));
     }
 
     @Test
@@ -96,13 +96,6 @@ class PositionReservationServiceTest {
         request.setReservationEndTime(LocalDateTime.of(2025, 8, 11, 10, 0, 0));
         request.setDutyDate(LocalDate.of(2025, 8, 12));
 
-        DynastyPosition position = new DynastyPosition();
-        position.setDynastyId(dynastyId);
-        position.setPositionType(PositionType.TAI_WEI);
-
-        when(dynastyPositionRepository.findByDynastyIdAndPositionType(dynastyId, PositionType.TAI_WEI))
-                .thenReturn(Optional.of(position));
-            
         // When & Then
         try (var mockedStatic = mockStatic(UserContext.class)) {
             mockedStatic.when(UserContext::getUserId).thenReturn(userId);
@@ -123,13 +116,6 @@ class PositionReservationServiceTest {
         request.setReservationEndTime(LocalDateTime.of(2025, 8, 12, 10, 0, 0)); // 不同天
         request.setDutyDate(LocalDate.of(2025, 8, 13));
 
-        DynastyPosition position = new DynastyPosition();
-        position.setDynastyId(dynastyId);
-        position.setPositionType(PositionType.TAI_WEI);
-
-        when(dynastyPositionRepository.findByDynastyIdAndPositionType(dynastyId, PositionType.TAI_WEI))
-                .thenReturn(Optional.of(position));
-            
         // When & Then
         try (var mockedStatic = mockStatic(UserContext.class)) {
             mockedStatic.when(UserContext::getUserId).thenReturn(userId);
@@ -150,13 +136,6 @@ class PositionReservationServiceTest {
         request.setReservationEndTime(LocalDateTime.of(2025, 8, 11, 23, 0, 0));
         request.setDutyDate(LocalDate.of(2025, 8, 11)); // 任职日期不在预约时间之后
 
-        DynastyPosition position = new DynastyPosition();
-        position.setDynastyId(dynastyId);
-        position.setPositionType(PositionType.TAI_WEI);
-
-        when(dynastyPositionRepository.findByDynastyIdAndPositionType(dynastyId, PositionType.TAI_WEI))
-                .thenReturn(Optional.of(position));
-            
         // When & Then
         try (var mockedStatic = mockStatic(UserContext.class)) {
             mockedStatic.when(UserContext::getUserId).thenReturn(userId);

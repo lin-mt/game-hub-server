@@ -3,6 +3,7 @@ package com.app.gamehub.service;
 import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.ExcelWriter;
 import com.alibaba.excel.write.metadata.WriteSheet;
+import com.alibaba.excel.write.style.column.LongestMatchColumnWidthStyleStrategy;
 import com.app.gamehub.dto.TacticSortMode;
 import com.app.gamehub.dto.TacticTemplateConfig;
 import com.app.gamehub.dto.UseTacticRequest;
@@ -678,7 +679,9 @@ public class WarService {
     String fileName = URLEncoder.encode("战事人员名单", StandardCharsets.UTF_8).replaceAll("\\+", "%20");
     response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + fileName + ".xlsx");
 
-    try (ExcelWriter excelWriter = EasyExcel.write(response.getOutputStream()).build()) {
+    try (ExcelWriter excelWriter = EasyExcel.write(response.getOutputStream())
+        .registerWriteHandler(new LongestMatchColumnWidthStyleStrategy())
+        .build()) {
       WarType[] warTypes = WarType.values();
       for (int i = 0; i < warTypes.length; i++) {
         WarType warType = warTypes[i];

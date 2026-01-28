@@ -32,6 +32,9 @@ class DynastyServiceTest {
     private DynastyPositionRepository dynastyPositionRepository;
     
     @Mock
+    private PositionReservationRepository positionReservationRepository;
+    
+    @Mock
     private GameAccountRepository gameAccountRepository;
     
     @Mock
@@ -388,6 +391,10 @@ class DynastyServiceTest {
 
             dynastyService.deleteDynasty(dynastyId);
 
+            // Verify the deletion order: reservations -> positions -> accounts -> dynasty
+            verify(positionReservationRepository).deleteByDynastyId(dynastyId);
+            verify(positionReservationRepository).flush();
+            
             verify(dynastyPositionRepository).deleteByDynastyId(dynastyId);
             verify(dynastyPositionRepository).flush();
 
@@ -450,6 +457,7 @@ class DynastyServiceTest {
             assertNotNull(result);
             assertNull(result.getDynastyId());
             verify(gameAccountRepository).save(account);
+            verify(positionReservationRepository).deleteByAccountId(accountId);
             assertNull(account.getDynastyId());
         }
     }

@@ -6,9 +6,6 @@ import java.math.BigDecimal;
 
 @Data
 public class AllianceMemberExportDto {
-    @ExcelProperty("账号ID")
-    private Long id;
-
     @ExcelProperty("服务器")
     private Integer serverId;
 

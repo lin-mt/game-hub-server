@@ -1,6 +1,7 @@
 package com.app.gamehub.service;
 
 import com.alibaba.excel.EasyExcel;
+import com.alibaba.excel.write.style.column.LongestMatchColumnWidthStyleStrategy;
 import com.app.gamehub.dto.AllianceMemberExportDto;
 import com.app.gamehub.dto.AllianceMemberSummaryDto;
 import com.app.gamehub.dto.JoinAllianceRequest;
@@ -268,12 +269,14 @@ public class AllianceMemberService {
     String fileName = URLEncoder.encode("成员列表", StandardCharsets.UTF_8).replaceAll("\\+", "%20");
     response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + fileName + ".xlsx");
 
-    EasyExcel.write(response.getOutputStream(), AllianceMemberExportDto.class).sheet("成员").doWrite(exportData);
+    EasyExcel.write(response.getOutputStream(), AllianceMemberExportDto.class)
+        .sheet("成员")
+        .registerWriteHandler(new LongestMatchColumnWidthStyleStrategy())
+        .doWrite(exportData);
   }
 
   private AllianceMemberExportDto toExportDto(GameAccount a) {
     AllianceMemberExportDto d = new AllianceMemberExportDto();
-    d.setId(a.getId());
     d.setServerId(a.getServerId());
     d.setAccountName(a.getAccountName());
     d.setMemberTier(a.getMemberTier() != null ? translateTier(a.getMemberTier()) : null);
