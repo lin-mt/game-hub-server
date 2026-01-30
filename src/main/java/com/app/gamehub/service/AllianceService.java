@@ -388,12 +388,12 @@ public class AllianceService {
       throw new BusinessException("开始时间不能设置在星期日");
     }
 
-    // 结束时间必须在星期六10:00之前
-    if (request.getEndDay() == 6 && request.getEndMinute() >= 600) {
-      throw new BusinessException("结束时间必须在星期六10:00之前");
+    // 结束时间必须在星期日10:00之前
+    if (request.getEndDay() == 7 && request.getEndMinute() >= 600) {
+      throw new BusinessException("结束时间必须在星期日10:00之前");
     }
-    if (request.getEndDay() == 7) {
-      throw new BusinessException("结束时间必须在星期六10:00之前");
+    if (request.getEndDay() > 7) {
+      throw new BusinessException("结束时间必须在星期日10:00之前");
     }
 
     // 验证时间范围的合理性（开始时间必须早于结束时间）

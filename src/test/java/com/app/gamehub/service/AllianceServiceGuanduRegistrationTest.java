@@ -123,7 +123,7 @@ class AllianceServiceGuanduRegistrationTest {
         UpdateGuanduRegistrationTimeRequest request = new UpdateGuanduRegistrationTimeRequest();
         request.setStartDay(2);
         request.setStartMinute(600);
-        request.setEndDay(6); // 星期六
+        request.setEndDay(7); // 星期日
         request.setEndMinute(600); // 10:00，应该小于10:00
         
         when(allianceRepository.findById(testAllianceId)).thenReturn(Optional.of(testAlliance));
@@ -135,7 +135,7 @@ class AllianceServiceGuanduRegistrationTest {
             BusinessException exception = assertThrows(BusinessException.class, () -> {
                 allianceService.updateGuanduRegistrationTime(testAllianceId, request);
             });
-            assertEquals("结束时间必须在星期六10:00之前", exception.getMessage());
+            assertEquals("结束时间必须在星期日10:00之前", exception.getMessage());
         }
     }
 
