@@ -70,16 +70,19 @@ public class AllianceMemberService {
       throw new BusinessException("只能为自己的账号申请加入联盟");
     }
 
-    // 验证账号是否已加入联盟
-    if (account.getAllianceId() != null) {
-      throw new BusinessException("账号已加入联盟，请先退出当前联盟");
-    }
-
     // 查找联盟
     Alliance alliance =
         allianceRepository
             .findByCode(request.getAllianceCode().toUpperCase())
             .orElseThrow(() -> new BusinessException("联盟不存在"));
+
+    // 验证账号是否已加入联盟
+    if (account.getAllianceId() != null) {
+      if (account.getAllianceId().equals(alliance.getId())) {
+        return null;
+      }
+      throw new BusinessException("账号已加入联盟，请先退出当前联盟");
+    }
 
     // 验证账号和联盟是否在同一个区
     if (!account.getServerId().equals(alliance.getServerId())) {
@@ -233,7 +236,8 @@ public class AllianceMemberService {
     allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
 
     // 获取联盟成员列表（按战力值降序排列）
-    List<GameAccount> accounts = gameAccountRepository.findByAllianceIdOrderByPowerValueDesc(allianceId);
+    List<GameAccount> accounts =
+        gameAccountRepository.findByAllianceIdOrderByPowerValueDesc(allianceId);
     List<AllianceMemberSummaryDto> result = new ArrayList<>();
     for (GameAccount a : accounts) {
       result.add(toDto(a));
@@ -261,8 +265,10 @@ public class AllianceMemberService {
     // 验证联盟是否存在
     allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    List<GameAccount> accounts = gameAccountRepository.findByAllianceIdOrderByPowerValueDesc(allianceId);
-    List<AllianceMemberExportDto> exportData = accounts.stream().map(this::toExportDto).collect(Collectors.toList());
+    List<GameAccount> accounts =
+        gameAccountRepository.findByAllianceIdOrderByPowerValueDesc(allianceId);
+    List<AllianceMemberExportDto> exportData =
+        accounts.stream().map(this::toExportDto).collect(Collectors.toList());
 
     response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     response.setCharacterEncoding("utf-8");
@@ -325,7 +331,9 @@ public class AllianceMemberService {
 
     // 现在姓名不会包含空格：使用更简单的正则
     // 格式：行号 + 多空格 + 姓名(非空格) + 多空格 + 阶位(数字) + 多空格 + 火炉等级 + 多空格 + 战力(任意位数数字, 允许千位分隔)
-    Pattern linePattern = Pattern.compile("^\\s*\\d+\\s+(\\S+)\\s+(\\d+)\\s+\\S+\\s+(\\d{1,}(?:,\\d{3})*|\\d+)\\b.*$");
+    Pattern linePattern =
+        Pattern.compile(
+            "^\\s*\\d+\\s+(\\S+)\\s+(\\d+)\\s+\\S+\\s+(\\d{1,}(?:,\\d{3})*|\\d+)\\b.*$");
 
     for (String line : lines) {
       if (line == null) continue;
@@ -379,7 +387,8 @@ public class AllianceMemberService {
       // ignore
     }
 
-    Optional<GameAccount> opt = gameAccountRepository.findByAllianceIdAndAccountName(allianceId, name);
+    Optional<GameAccount> opt =
+        gameAccountRepository.findByAllianceIdAndAccountName(allianceId, name);
     if (opt.isEmpty()) {
       notFoundNames.add(name + " (原始战力:" + powerStr + ")");
       return false;
