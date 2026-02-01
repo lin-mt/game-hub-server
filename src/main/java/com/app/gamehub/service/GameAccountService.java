@@ -18,6 +18,7 @@ import com.app.gamehub.service.ocr.OcrServiceManager;
 import com.app.gamehub.util.UserContext;
 import jakarta.persistence.EntityManager;
 import java.io.File;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
@@ -69,13 +70,15 @@ public class GameAccountService {
       throw new BusinessException("每个用户在每个区最多只能创建2个账号");
     }
 
-    Optional<GameAccount> gameAccount =
+    // 检查是否已存在同名账号
+    Optional<GameAccount> existingAccount =
         gameAccountRepository.findByAccountNameAndServerIdAndUserId(
-            request.getAccountName(), request.getServerId(), UserContext.getUserId());
-    GameAccount account = new GameAccount();
-    if (gameAccount.isPresent()) {
-      account = gameAccount.get();
+            request.getAccountName(), request.getServerId(), userId);
+    if (existingAccount.isPresent()) {
+      throw new BusinessException("该区已存在同名账号");
     }
+
+    GameAccount account = new GameAccount();
     account.setUserId(userId);
     account.setServerId(request.getServerId());
     account.setAccountName(request.getAccountName());
@@ -89,6 +92,109 @@ public class GameAccountService {
     account.setArcherAttack(request.getArcherAttack());
     account.setArcherSiege(request.getArcherSiege());
     account.setLvbuStarLevel(request.getLvbuStarLevel());
+
+    // 如果提供了联盟ID，则直接加入联盟
+    if (request.getAllianceId() != null) {
+      // 验证联盟是否存在且在同一个区
+      Alliance alliance = allianceRepository.findById(request.getAllianceId())
+          .orElseThrow(() -> new BusinessException("联盟不存在"));
+      
+      if (!alliance.getServerId().equals(request.getServerId())) {
+        throw new BusinessException("只能加入同一个区的联盟");
+      }
+
+      // 检查联盟中是否有同名的无主账号
+      Optional<GameAccount> unownedAccount =
+          gameAccountRepository.findByAllianceIdAndAccountName(
+              alliance.getId(), request.getAccountName());
+
+      if (unownedAccount.isPresent() && unownedAccount.get().getUserId() == null) {
+        // 找到同名的无主账号，将其信息合并到新创建的账号中
+        GameAccount unowned = unownedAccount.get();
+        log.info("发现同名无主账号 {}，开始合并到新创建的用户账号", unowned.getId());
+        
+        // 合并无主账号的非空字段到新账号
+        if (unowned.getPowerValue() != null && (account.getPowerValue() == null || account.getPowerValue() == 0)) {
+          account.setPowerValue(unowned.getPowerValue());
+        }
+        if (unowned.getDamageBonus() != null && (account.getDamageBonus() == null || account.getDamageBonus().compareTo(BigDecimal.ZERO) == 0)) {
+          account.setDamageBonus(unowned.getDamageBonus());
+        }
+        if (unowned.getTroopLevel() != null && (account.getTroopLevel() == null || account.getTroopLevel() == 1)) {
+          account.setTroopLevel(unowned.getTroopLevel());
+        }
+        if (unowned.getRallyCapacity() != null && (account.getRallyCapacity() == null || account.getRallyCapacity() == 0)) {
+          account.setRallyCapacity(unowned.getRallyCapacity());
+        }
+        if (unowned.getTroopQuantity() != null && (account.getTroopQuantity() == null || account.getTroopQuantity() == 0)) {
+          account.setTroopQuantity(unowned.getTroopQuantity());
+        }
+        if (unowned.getInfantryDefense() != null && (account.getInfantryDefense() == null || account.getInfantryDefense() == 0)) {
+          account.setInfantryDefense(unowned.getInfantryDefense());
+        }
+        if (unowned.getInfantryHp() != null && (account.getInfantryHp() == null || account.getInfantryHp() == 0)) {
+          account.setInfantryHp(unowned.getInfantryHp());
+        }
+        if (unowned.getArcherAttack() != null && (account.getArcherAttack() == null || account.getArcherAttack() == 0)) {
+          account.setArcherAttack(unowned.getArcherAttack());
+        }
+        if (unowned.getArcherSiege() != null && (account.getArcherSiege() == null || account.getArcherSiege() == 0)) {
+          account.setArcherSiege(unowned.getArcherSiege());
+        }
+        if (unowned.getLvbuStarLevel() != null && (account.getLvbuStarLevel() == null || account.getLvbuStarLevel().compareTo(BigDecimal.ZERO) == 0)) {
+          account.setLvbuStarLevel(unowned.getLvbuStarLevel());
+        }
+        if (unowned.getMemberTier() != null) {
+          account.setMemberTier(unowned.getMemberTier());
+        }
+        if (unowned.getBarbarianGroupId() != null) {
+          account.setBarbarianGroupId(unowned.getBarbarianGroupId());
+        }
+
+        // 设置联盟信息
+        account.setAllianceId(alliance.getId());
+        
+        // 先保存新账号
+        GameAccount savedAccount = gameAccountRepository.save(account);
+        
+        // 转移无主账号的关联记录
+        Long unownedAccountId = unowned.getId();
+        Long newAccountId = savedAccount.getId();
+        
+        // 转移联盟申请记录
+        allianceApplicationRepository.transferToAccount(unownedAccountId, newAccountId);
+        entityManager.flush();
+        
+        // 转移战事申请记录
+        warApplicationRepository.transferToAccount(unownedAccountId, newAccountId);
+        entityManager.flush();
+        
+        // 转移战事安排记录
+        warArrangementRepository.transferToAccount(unownedAccountId, newAccountId);
+        entityManager.flush();
+        
+        // 转移官职预约记录
+        positionReservationRepository.transferToAccount(unownedAccountId, newAccountId);
+        entityManager.flush();
+        
+        // 转移马车排队记录
+        carriageQueueRepository.transferToAccount(unownedAccountId, newAccountId);
+        entityManager.flush();
+        
+        // 删除无主账号
+        gameAccountRepository.delete(unowned);
+        entityManager.flush();
+        entityManager.clear();
+        
+        log.info("成功合并无主账号 {} 到新创建的用户账号 {}", unownedAccountId, newAccountId);
+        return savedAccount;
+      } else {
+        // 没有同名无主账号，直接加入联盟
+        account.setAllianceId(alliance.getId());
+        account.setMemberTier(GameAccount.MemberTier.TIER_1); // 默认为一阶成员
+        log.info("用户 {} 创建账号并直接加入联盟 {}", userId, alliance.getId());
+      }
+    }
 
     return gameAccountRepository.save(account);
   }

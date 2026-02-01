@@ -38,6 +38,10 @@ public interface GameAccountRepository extends JpaRepository<GameAccount, Long> 
   // 新增：按联盟ID和账号名称查找单个账号，用于根据成员名称更新信息
   Optional<GameAccount> findByAllianceIdAndAccountName(Long allianceId, String accountName);
 
+  // 新增：查找联盟中的所有无主账号
+  @Query("SELECT ga FROM GameAccount ga WHERE ga.allianceId = :allianceId AND ga.userId IS NULL ORDER BY ga.accountName")
+  List<GameAccount> findUnownedAccountsByAlliance(@Param("allianceId") Long allianceId);
+
   Optional<GameAccount> findByAccountNameAndServerIdAndUserId(
       String accountName, Integer serverId, Long userId);
 

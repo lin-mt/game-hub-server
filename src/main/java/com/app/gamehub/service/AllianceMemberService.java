@@ -626,4 +626,18 @@ public class AllianceMemberService {
     log.info("账号合并完成，用户账号 {} 已获得无主账号的所有信息和关联记录", userAccountId);
     return savedUserAccount;
   }
+
+  /**
+   * 获取联盟中的无主账号列表
+   *
+   * @param allianceId 联盟ID
+   * @return 无主账号列表
+   */
+  public List<GameAccount> getUnownedAccounts(Long allianceId) {
+    // 验证联盟是否存在
+    allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
+    
+    // 获取联盟中的无主账号列表（按账号名称排序）
+    return gameAccountRepository.findByAllianceIdAndUserIdIsNull(allianceId);
+  }
 }

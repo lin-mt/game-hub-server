@@ -61,4 +61,7 @@ public class CreateGameAccountRequest {
   @ValidLvbuStarLevel
   @Schema(description = "吕布星级（0-5星，遵循0.5进1规则）", example = "0.0")
   private BigDecimal lvbuStarLevel;
+
+  @Schema(description = "联盟ID（可选，如果提供则创建账号时直接加入联盟）")
+  private Long allianceId;
 }

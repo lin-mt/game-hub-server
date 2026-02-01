@@ -97,4 +97,12 @@ public class AllianceMemberController {
       HttpServletResponse response) throws IOException {
     allianceMemberService.exportMembers(allianceId, response);
   }
+
+  @GetMapping("/alliances/{allianceId}/unowned-accounts")
+  @Operation(summary = "获取联盟中的无主账号列表")
+  public ApiResponse<List<GameAccount>> getUnownedAccounts(
+      @Parameter(description = "联盟ID", example = "1") @PathVariable Long allianceId) {
+    List<GameAccount> unownedAccounts = allianceMemberService.getUnownedAccounts(allianceId);
+    return ApiResponse.success(unownedAccounts);
+  }
 }
