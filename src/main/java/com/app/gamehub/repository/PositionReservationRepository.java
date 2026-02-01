@@ -2,7 +2,6 @@ package com.app.gamehub.repository;
 
 import com.app.gamehub.entity.PositionReservation;
 import com.app.gamehub.entity.PositionType;
-import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -11,6 +10,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 /** 官职预约数据访问接口 */
 @Repository
@@ -54,6 +54,12 @@ public interface PositionReservationRepository extends JpaRepository<PositionRes
   @Modifying
   @Query("DELETE FROM PositionReservation pr WHERE pr.accountId = :accountId")
   void deleteByAccountId(@Param("accountId") Long accountId);
+
+  /** 将指定账号的所有官职预约记录转移到另一个账号 */
+  @Modifying
+  @Transactional
+  @Query("UPDATE PositionReservation pr SET pr.accountId = :newAccountId WHERE pr.accountId = :oldAccountId")
+  void transferToAccount(@Param("oldAccountId") Long oldAccountId, @Param("newAccountId") Long newAccountId);
 
   @Modifying
   @Query("DELETE FROM PositionReservation pr WHERE pr.dutyDate < :before")

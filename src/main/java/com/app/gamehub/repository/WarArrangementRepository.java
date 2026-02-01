@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public interface WarArrangementRepository extends JpaRepository<WarArrangement, Long> {
@@ -40,12 +41,23 @@ public interface WarArrangementRepository extends JpaRepository<WarArrangement, 
 
   boolean existsByAccountIdAndWarTypeIn(Long id, Collection<WarType> types);
 
+  /** 将指定账号的所有战事安排记录转移到另一个账号 */
+  @Modifying
+  @Transactional
+  @Query(
+      "UPDATE WarArrangement wa SET wa.accountId = :newAccountId WHERE wa.accountId = :oldAccountId")
+  void transferToAccount(
+      @Param("oldAccountId") Long oldAccountId, @Param("newAccountId") Long newAccountId);
+
   long countByAllianceIdAndWarType(Long allianceId, WarType warType);
 
   // Count arranged main/substitute members
-  long countByAllianceIdAndWarTypeAndIsSubstitute(Long allianceId, WarType warType, Boolean isSubstitute);
+  long countByAllianceIdAndWarTypeAndIsSubstitute(
+      Long allianceId, WarType warType, Boolean isSubstitute);
 
   @Modifying
-  @Query("DELETE FROM WarArrangement wa WHERE wa.allianceId = :allianceId AND wa.warType IN :warTypes")
-  void deleteByAllianceIdAndWarTypeIn(@Param("allianceId") Long allianceId, @Param("warTypes") Collection<WarType> warTypes);
+  @Query(
+      "DELETE FROM WarArrangement wa WHERE wa.allianceId = :allianceId AND wa.warType IN :warTypes")
+  void deleteByAllianceIdAndWarTypeIn(
+      @Param("allianceId") Long allianceId, @Param("warTypes") Collection<WarType> warTypes);
 }

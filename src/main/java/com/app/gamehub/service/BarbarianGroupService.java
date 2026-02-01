@@ -66,7 +66,7 @@ public class BarbarianGroupService {
     GameAccount account = gameAccountRepository.findById(request.getAccountId())
         .orElseThrow(() -> new BusinessException("账号不存在"));
 
-    if (!account.getUserId().equals(userId)) {
+    if (account.getUserId() == null || !account.getUserId().equals(userId)) {
       throw new BusinessException("只能操作自己的账号");
     }
 
@@ -105,7 +105,7 @@ public class BarbarianGroupService {
     GameAccount account = gameAccountRepository.findById(request.getAccountId())
         .orElseThrow(() -> new BusinessException("账号不存在"));
 
-    if (!account.getUserId().equals(userId)) {
+    if (account.getUserId() == null || !account.getUserId().equals(userId)) {
       throw new BusinessException("只能操作自己的账号");
     }
 
@@ -156,7 +156,7 @@ public class BarbarianGroupService {
     GameAccount account = gameAccountRepository.findById(accountId)
         .orElseThrow(() -> new BusinessException("账号不存在"));
 
-    if (!account.getUserId().equals(userId)) {
+    if (account.getUserId() == null || !account.getUserId().equals(userId)) {
       throw new BusinessException("只能操作自己的账号");
     }
 

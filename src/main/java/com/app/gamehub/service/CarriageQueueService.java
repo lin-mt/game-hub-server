@@ -56,7 +56,7 @@ public class CarriageQueueService {
 
     // 验证账号是否属于当前用户
     Long userId = UserContext.getUserId();
-    if (!gameAccount.getUserId().equals(userId)) {
+    if (gameAccount.getUserId() == null || !gameAccount.getUserId().equals(userId)) {
       throw new BusinessException("只能为自己的游戏账号报名");
     }
 
@@ -103,7 +103,7 @@ public class CarriageQueueService {
 
     // 验证账号是否属于当前用户
     Long userId = UserContext.getUserId();
-    if (!gameAccount.getUserId().equals(userId)) {
+    if (gameAccount.getUserId() == null || !gameAccount.getUserId().equals(userId)) {
       throw new BusinessException("只能退出自己的游戏账号");
     }
 

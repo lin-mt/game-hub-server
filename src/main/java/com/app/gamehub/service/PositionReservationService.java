@@ -143,7 +143,7 @@ public class PositionReservationService {
     GameAccount account =
         gameAccountRepository.findById(accountId).orElseThrow(() -> new BusinessException("账号不存在"));
 
-    if (!account.getUserId().equals(userId)) {
+    if (account.getUserId() == null || !account.getUserId().equals(userId)) {
       throw new BusinessException("无权操作此账号");
     }
 
@@ -400,7 +400,7 @@ public class PositionReservationService {
         gameAccountRepository.findById(accountId).orElseThrow(() -> new BusinessException("账号不存在"));
     Dynasty dynasty =
         dynastyRepository.findById(dynastyId).orElseThrow(() -> new BusinessException("王朝不存在"));
-    if (!dynasty.getEmperorId().equals(userId) && !account.getUserId().equals(userId)) {
+    if (!dynasty.getEmperorId().equals(userId) && (account.getUserId() == null || !account.getUserId().equals(userId))) {
       throw new BusinessException("只有账号本人和王朝天子才可以取消官职");
     }
 

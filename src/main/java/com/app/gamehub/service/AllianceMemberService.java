@@ -12,10 +12,13 @@ import com.app.gamehub.exception.BusinessException;
 import com.app.gamehub.repository.AllianceApplicationRepository;
 import com.app.gamehub.repository.AllianceRepository;
 import com.app.gamehub.repository.BarbarianGroupRepository;
+import com.app.gamehub.repository.CarriageQueueRepository;
 import com.app.gamehub.repository.GameAccountRepository;
+import com.app.gamehub.repository.PositionReservationRepository;
 import com.app.gamehub.repository.WarApplicationRepository;
 import com.app.gamehub.repository.WarArrangementRepository;
 import com.app.gamehub.util.UserContext;
+import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -40,6 +43,9 @@ public class AllianceMemberService {
   private final WarApplicationRepository warApplicationRepository;
   private final WarArrangementRepository warArrangementRepository;
   private final BarbarianGroupRepository barbarianGroupRepository;
+  private final PositionReservationRepository positionReservationRepository;
+  private final CarriageQueueRepository carriageQueueRepository;
+  private final EntityManager entityManager;
 
   public AllianceMemberService(
       AllianceRepository allianceRepository,
@@ -47,13 +53,19 @@ public class AllianceMemberService {
       AllianceApplicationRepository applicationRepository,
       WarApplicationRepository repository,
       WarArrangementRepository warArrangementRepository,
-      BarbarianGroupRepository barbarianGroupRepository) {
+      BarbarianGroupRepository barbarianGroupRepository,
+      PositionReservationRepository positionReservationRepository,
+      CarriageQueueRepository carriageQueueRepository,
+      EntityManager entityManager) {
     this.allianceRepository = allianceRepository;
     this.gameAccountRepository = gameAccountRepository;
     this.applicationRepository = applicationRepository;
     warApplicationRepository = repository;
     this.warArrangementRepository = warArrangementRepository;
     this.barbarianGroupRepository = barbarianGroupRepository;
+    this.positionReservationRepository = positionReservationRepository;
+    this.carriageQueueRepository = carriageQueueRepository;
+    this.entityManager = entityManager;
   }
 
   @Transactional
@@ -66,7 +78,7 @@ public class AllianceMemberService {
             .findById(accountId)
             .orElseThrow(() -> new BusinessException("游戏账号不存在"));
 
-    if (!account.getUserId().equals(UserContext.getUserId())) {
+    if (account.getUserId() == null || !account.getUserId().equals(UserContext.getUserId())) {
       throw new BusinessException("只能为自己的账号申请加入联盟");
     }
 
@@ -93,6 +105,18 @@ public class AllianceMemberService {
     if (applicationRepository.existsByAccountIdAndStatus(
         accountId, AllianceApplication.ApplicationStatus.PENDING)) {
       throw new BusinessException("已有待处理的申请，请等待处理结果");
+    }
+
+    // 检查联盟中是否有同名的无主账号
+    Optional<GameAccount> unownedAccount =
+        gameAccountRepository.findByAllianceIdAndAccountName(
+            alliance.getId(), account.getAccountName());
+
+    if (unownedAccount.isPresent() && unownedAccount.get().getUserId() == null) {
+      // 找到同名的无主账号，将其信息合并到用户账号中
+      GameAccount mergedAccount = mergeUnownedAccountToUserAccount(account, unownedAccount.get());
+      log.info("用户 {} 通过同名无主账号直接加入联盟 {}", UserContext.getUserId(), alliance.getId());
+      return null;
     }
 
     // 创建申请
@@ -145,16 +169,27 @@ public class AllianceMemberService {
     }
 
     if (approved) {
-
       // 通过申请，将账号加入联盟
       GameAccount account =
           gameAccountRepository
               .findById(application.getAccountId())
               .orElseThrow(() -> new BusinessException("游戏账号不存在"));
 
-      account.setAllianceId(alliance.getId());
-      account.setMemberTier(GameAccount.MemberTier.TIER_1); // 默认为一阶成员
-      gameAccountRepository.save(account);
+      // 检查联盟中是否有同名的无主账号
+      Optional<GameAccount> unownedAccount =
+          gameAccountRepository.findByAllianceIdAndAccountName(
+              alliance.getId(), account.getAccountName());
+
+      if (unownedAccount.isPresent() && unownedAccount.get().getUserId() == null) {
+        // 找到同名的无主账号，将其信息合并到用户账号中
+        GameAccount mergedAccount = mergeUnownedAccountToUserAccount(account, unownedAccount.get());
+        log.info("用户 {} 通过同名无主账号加入联盟 {}", account.getUserId(), alliance.getId());
+      } else {
+        // 正常加入联盟流程
+        account.setAllianceId(alliance.getId());
+        account.setMemberTier(GameAccount.MemberTier.TIER_1); // 默认为一阶成员
+        gameAccountRepository.save(account);
+      }
 
       application.setStatus(AllianceApplication.ApplicationStatus.APPROVED);
     } else {
@@ -183,7 +218,8 @@ public class AllianceMemberService {
             .findById(account.getAllianceId())
             .orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!alliance.getLeaderId().equals(userId) && !account.getUserId().equals(userId)) {
+    if (!alliance.getLeaderId().equals(userId)
+        && (account.getUserId() == null || !account.getUserId().equals(userId))) {
       throw new BusinessException("只有盟主或账号本人可以操作账号退出联盟");
     }
 
@@ -313,6 +349,7 @@ public class AllianceMemberService {
   /**
    * 从传入的成员文本批量更新联盟成员的阶级和战力（战力单位：文本为实际数字，数据库以万为单位存储） 文本格式参考：成员信息.txt，每行包含：序号 成员名称 阶级 火炉等级 战力 ...
    * 本方法会根据成员名称在指定联盟中查找账号（精确匹配 accountName 字段），并更新 memberTier 和 powerValue
+   * 如果账号不存在，则创建一个不属于任何用户但属于联盟的账号
    */
   @Transactional
   public String bulkUpdateMembersFromText(Long allianceId, String rawText) {
@@ -327,6 +364,7 @@ public class AllianceMemberService {
 
     String[] lines = rawText.split("\\r?\\n");
     int updatedCount = 0;
+    int createdCount = 0;
     List<String> notFoundNames = new ArrayList<>();
 
     // 现在姓名不会包含空格：使用更简单的正则
@@ -352,8 +390,9 @@ public class AllianceMemberService {
         if (name.isBlank() || name.matches("^\\d+$")) continue;
         String tierStr = parts[2];
         String powerStr = parts[4]; // index(0),name(1),tier(2),furnace(3),power(4)
-        boolean handled = handleSingleEntry(allianceId, name, tierStr, powerStr, notFoundNames);
-        if (handled) updatedCount++;
+        int result = handleSingleEntry(allianceId, name, tierStr, powerStr, notFoundNames);
+        if (result == 1) updatedCount++;
+        else if (result == 2) createdCount++;
         continue;
       }
 
@@ -364,16 +403,24 @@ public class AllianceMemberService {
       // 姓名不会包含空格，若为空或是纯数字则跳过
       if (name.isBlank() || name.matches("^\\d+$")) continue;
 
-      boolean updated = handleSingleEntry(allianceId, name, tierStr, powerStr, notFoundNames);
-      if (updated) updatedCount++;
+      int result = handleSingleEntry(allianceId, name, tierStr, powerStr, notFoundNames);
+      if (result == 1) updatedCount++;
+      else if (result == 2) createdCount++;
     }
 
-    return "已更新成员数: " + updatedCount + "。\n";
+    StringBuilder resultMsg = new StringBuilder();
+    resultMsg.append("已更新成员数: ").append(updatedCount);
+    if (createdCount > 0) {
+      resultMsg.append("，已创建无主账号数: ").append(createdCount);
+    }
+    resultMsg.append("。\n");
+
+    return resultMsg.toString();
   }
 
-  private boolean handleSingleEntry(
+  private int handleSingleEntry(
       Long allianceId, String name, String tierStr, String powerStr, List<String> notFoundNames) {
-    if (name == null || name.isBlank()) return false;
+    if (name == null || name.isBlank()) return 0;
 
     // 解析阶级
     GameAccount.MemberTier tier = parseTier(tierStr);
@@ -390,8 +437,15 @@ public class AllianceMemberService {
     Optional<GameAccount> opt =
         gameAccountRepository.findByAllianceIdAndAccountName(allianceId, name);
     if (opt.isEmpty()) {
-      notFoundNames.add(name + " (原始战力:" + powerStr + ")");
-      return false;
+      // 账号不存在，创建一个不属于任何用户但属于联盟的账号
+      GameAccount newAccount = createUnownedAllianceAccount(allianceId, name, tier, power);
+      if (newAccount != null) {
+        log.info("为联盟 {} 创建了无主账号: {}", allianceId, name);
+        return 2; // 返回2表示创建了新账号
+      } else {
+        notFoundNames.add(name + " (原始战力:" + powerStr + ")");
+        return 0; // 返回0表示失败
+      }
     }
 
     GameAccount account = opt.get();
@@ -408,7 +462,7 @@ public class AllianceMemberService {
     }
 
     gameAccountRepository.save(account);
-    return true;
+    return 1; // 返回1表示更新了现有账号
   }
 
   private GameAccount.MemberTier parseTier(String tierStr) {
@@ -433,5 +487,143 @@ public class AllianceMemberService {
     } catch (NumberFormatException e) {
       return null;
     }
+  }
+
+  /**
+   * 创建一个不属于任何用户但属于联盟的账号
+   *
+   * @param allianceId 联盟ID
+   * @param accountName 账号名称
+   * @param tier 成员阶级
+   * @param power 战力值
+   * @return 创建的账号，如果创建失败返回null
+   */
+  private GameAccount createUnownedAllianceAccount(
+      Long allianceId, String accountName, GameAccount.MemberTier tier, Long power) {
+    try {
+      // 获取联盟信息以确定服务器ID
+      Alliance alliance =
+          allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
+
+      GameAccount account = new GameAccount();
+      account.setUserId(null); // 不属于任何用户
+      account.setServerId(alliance.getServerId());
+      account.setAccountName(accountName);
+      account.setAllianceId(allianceId);
+      account.setMemberTier(tier);
+
+      if (power != null) {
+        long stored;
+        // 如果原始战力少于6位数，则按照要求使用 1
+        if (power < 100000L) {
+          stored = 1L;
+        } else {
+          stored = power / 10000L; // 数据库存以万为单位
+        }
+        account.setPowerValue(stored);
+      }
+
+      return gameAccountRepository.save(account);
+    } catch (Exception e) {
+      log.error("创建无主联盟账号失败: {}", e.getMessage());
+      return null;
+    }
+  }
+
+  /**
+   * 将无主账号的信息合并到用户账号中，并转移所有关联记录
+   *
+   * @param userAccount 用户的原有账号
+   * @param unownedAccount 无主账号
+   * @return 更新后的用户账号
+   */
+  @Transactional
+  public GameAccount mergeUnownedAccountToUserAccount(
+      GameAccount userAccount, GameAccount unownedAccount) {
+    log.info("开始合并无主账号 {} 到用户账号 {}", unownedAccount.getId(), userAccount.getId());
+
+    // 1. 复制无主账号的非空字段到用户账号
+    if (unownedAccount.getPowerValue() != null) {
+      userAccount.setPowerValue(unownedAccount.getPowerValue());
+    }
+    if (unownedAccount.getDamageBonus() != null) {
+      userAccount.setDamageBonus(unownedAccount.getDamageBonus());
+    }
+    if (unownedAccount.getTroopLevel() != null) {
+      userAccount.setTroopLevel(unownedAccount.getTroopLevel());
+    }
+    if (unownedAccount.getRallyCapacity() != null) {
+      userAccount.setRallyCapacity(unownedAccount.getRallyCapacity());
+    }
+    if (unownedAccount.getTroopQuantity() != null) {
+      userAccount.setTroopQuantity(unownedAccount.getTroopQuantity());
+    }
+    if (unownedAccount.getInfantryDefense() != null) {
+      userAccount.setInfantryDefense(unownedAccount.getInfantryDefense());
+    }
+    if (unownedAccount.getInfantryHp() != null) {
+      userAccount.setInfantryHp(unownedAccount.getInfantryHp());
+    }
+    if (unownedAccount.getArcherAttack() != null) {
+      userAccount.setArcherAttack(unownedAccount.getArcherAttack());
+    }
+    if (unownedAccount.getArcherSiege() != null) {
+      userAccount.setArcherSiege(unownedAccount.getArcherSiege());
+    }
+    if (unownedAccount.getLvbuStarLevel() != null) {
+      userAccount.setLvbuStarLevel(unownedAccount.getLvbuStarLevel());
+    }
+    if (unownedAccount.getMemberTier() != null) {
+      userAccount.setMemberTier(unownedAccount.getMemberTier());
+    }
+    if (unownedAccount.getBarbarianGroupId() != null) {
+      userAccount.setBarbarianGroupId(unownedAccount.getBarbarianGroupId());
+    }
+
+    // 设置联盟信息
+    userAccount.setAllianceId(unownedAccount.getAllianceId());
+
+    // 2. 转移所有关联记录
+    Long unownedAccountId = unownedAccount.getId();
+    Long userAccountId = userAccount.getId();
+
+    // 转移联盟申请记录
+    applicationRepository.transferToAccount(unownedAccountId, userAccountId);
+    entityManager.flush(); // 强制执行SQL
+    log.info("已转移联盟申请记录");
+
+    // 转移战事申请记录
+    warApplicationRepository.transferToAccount(unownedAccountId, userAccountId);
+    entityManager.flush(); // 强制执行SQL
+    log.info("已转移战事申请记录");
+
+    // 转移战事安排记录
+    warArrangementRepository.transferToAccount(unownedAccountId, userAccountId);
+    entityManager.flush(); // 强制执行SQL
+    log.info("已转移战事安排记录");
+
+    // 转移官职预约记录
+    positionReservationRepository.transferToAccount(unownedAccountId, userAccountId);
+    entityManager.flush(); // 强制执行SQL
+    log.info("已转移官职预约记录");
+
+    // 转移马车排队记录
+    carriageQueueRepository.transferToAccount(unownedAccountId, userAccountId);
+    entityManager.flush(); // 强制执行SQL
+    log.info("已转移马车排队记录");
+
+    // 3. 保存更新后的用户账号
+    GameAccount savedUserAccount = gameAccountRepository.save(userAccount);
+
+    // 4. 删除无主账号
+    gameAccountRepository.delete(unownedAccount);
+    entityManager.flush(); // 强制执行SQL
+
+    // 5. 清除EntityManager缓存，确保后续查询从数据库获取最新数据
+    entityManager.clear();
+    log.info("已删除无主账号 {}", unownedAccountId);
+
+    log.info("账号合并完成，用户账号 {} 已获得无主账号的所有信息和关联记录", userAccountId);
+    return savedUserAccount;
   }
 }

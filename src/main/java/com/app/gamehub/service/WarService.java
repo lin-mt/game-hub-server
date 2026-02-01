@@ -71,7 +71,7 @@ public class WarService {
             .findById(accountId)
             .orElseThrow(() -> new BusinessException("游戏账号不存在"));
 
-    if (!account.getUserId().equals(userId)) {
+    if (account.getUserId() == null || !account.getUserId().equals(userId)) {
       throw new BusinessException("只能为自己的账号申请参加战事");
     }
 
@@ -452,7 +452,7 @@ public class WarService {
         gameAccountRepository
             .findById(warRequest.getAccountId())
             .orElseThrow(() -> new BusinessException("账号不存在"));
-    if (!account.getUserId().equals(UserContext.getUserId())) {
+    if (account.getUserId() == null || !account.getUserId().equals(UserContext.getUserId())) {
       throw new BusinessException("不能取消他人的战事申请");
     }
     warApplicationRepository.deleteByAccountIdAndWarType(

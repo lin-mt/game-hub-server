@@ -2,11 +2,10 @@ package com.app.gamehub.entity;
 
 import com.app.gamehub.enums.ActivityType;
 import com.app.gamehub.validation.ValidLvbuStarLevel;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
+import java.util.HashSet;
 import java.util.Set;
 import lombok.Getter;
 import lombok.Setter;
@@ -18,7 +17,7 @@ import lombok.Setter;
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class GameAccount extends BaseEntity {
 
-  @Column(name = "user_id", nullable = false)
+  @Column(name = "user_id", nullable = true)
   private Long userId;
 
   @Column(name = "server_id", nullable = false)
@@ -73,19 +72,21 @@ public class GameAccount extends BaseEntity {
   private MemberTier memberTier;
 
   @ElementCollection(targetClass = ActivityType.class)
-  @CollectionTable(name = "game_account_notification_types",
-                   joinColumns = @JoinColumn(name = "account_id"))
+  @CollectionTable(
+      name = "game_account_notification_types",
+      joinColumns = @JoinColumn(name = "account_id"))
   @Enumerated(EnumType.STRING)
   @Column(name = "activity_type")
-  private Set<ActivityType> notificationTypes = Set.of(
-      ActivityType.SAN_YING_ZHAN_LV_BU,
-      ActivityType.GUAN_DU_BAO_MING,
-      ActivityType.ZHU_JIU_LUN_YING_XIONG,
-      ActivityType.NAN_MAN_RU_QIN,
-      ActivityType.GONG_CHENG,
-      ActivityType.SHOU_CHENG,
-      ActivityType.SHUA_GONG_XUN
-  );
+  private Set<ActivityType> notificationTypes =
+      new HashSet<>(
+          Set.of(
+              ActivityType.SAN_YING_ZHAN_LV_BU,
+              ActivityType.GUAN_DU_BAO_MING,
+              ActivityType.ZHU_JIU_LUN_YING_XIONG,
+              ActivityType.NAN_MAN_RU_QIN,
+              ActivityType.GONG_CHENG,
+              ActivityType.SHOU_CHENG,
+              ActivityType.SHUA_GONG_XUN));
 
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "user_id", insertable = false, updatable = false)

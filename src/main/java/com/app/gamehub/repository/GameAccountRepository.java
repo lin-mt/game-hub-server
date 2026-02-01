@@ -38,5 +38,9 @@ public interface GameAccountRepository extends JpaRepository<GameAccount, Long> 
   // 新增：按联盟ID和账号名称查找单个账号，用于根据成员名称更新信息
   Optional<GameAccount> findByAllianceIdAndAccountName(Long allianceId, String accountName);
 
-  Optional<GameAccount> findByAccountNameAndServerId(String accountName, Integer serverId);
+  Optional<GameAccount> findByAccountNameAndServerIdAndUserId(
+      String accountName, Integer serverId, Long userId);
+
+  /** 查找联盟中的无主账号（userId为null的账号） */
+  List<GameAccount> findByAllianceIdAndUserIdIsNull(Long allianceId);
 }

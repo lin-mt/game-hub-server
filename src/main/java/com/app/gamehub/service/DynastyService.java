@@ -131,7 +131,7 @@ public class DynastyService {
     GameAccount account =
         gameAccountRepository.findById(accountId).orElseThrow(() -> new BusinessException("账号不存在"));
 
-    if (!account.getUserId().equals(userId)) {
+    if (account.getUserId() == null || !account.getUserId().equals(userId)) {
       throw new BusinessException("无权操作此账号");
     }
 
@@ -271,7 +271,7 @@ public class DynastyService {
     GameAccount account =
         gameAccountRepository.findById(accountId).orElseThrow(() -> new BusinessException("账号不存在"));
 
-    if (!account.getUserId().equals(userId)) {
+    if (account.getUserId() == null || !account.getUserId().equals(userId)) {
       throw new BusinessException("无权操作此账号");
     }
 

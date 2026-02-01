@@ -16,6 +16,7 @@ import com.app.gamehub.repository.WarApplicationRepository;
 import com.app.gamehub.repository.WarArrangementRepository;
 import com.app.gamehub.service.ocr.OcrServiceManager;
 import com.app.gamehub.util.UserContext;
+import jakarta.persistence.EntityManager;
 import java.io.File;
 import java.nio.file.Files;
 import java.util.List;
@@ -51,6 +52,8 @@ public class GameAccountService {
 
   @Autowired private OcrServiceManager ocrServiceManager;
 
+  @Autowired private EntityManager entityManager;
+
   @Transactional
   public GameAccount createGameAccount(CreateGameAccountRequest request) {
     Long userId = UserContext.getUserId();
@@ -67,8 +70,8 @@ public class GameAccountService {
     }
 
     Optional<GameAccount> gameAccount =
-        gameAccountRepository.findByAccountNameAndServerId(
-            request.getAccountName(), request.getServerId());
+        gameAccountRepository.findByAccountNameAndServerIdAndUserId(
+            request.getAccountName(), request.getServerId(), UserContext.getUserId());
     GameAccount account = new GameAccount();
     if (gameAccount.isPresent()) {
       account = gameAccount.get();
@@ -99,7 +102,7 @@ public class GameAccountService {
             .orElseThrow(() -> new BusinessException("游戏账号不存在"));
 
     // 验证权限：账号所有者或盟主可以更新
-    boolean canUpdate = account.getUserId().equals(userId);
+    boolean canUpdate = account.getUserId() != null && account.getUserId().equals(userId);
     if (!canUpdate && account.getAllianceId() != null) {
       Alliance alliance = allianceRepository.findById(account.getAllianceId()).orElse(null);
       canUpdate = alliance != null && alliance.getLeaderId().equals(userId);
@@ -109,13 +112,42 @@ public class GameAccountService {
       throw new BusinessException("没有权限更新此账号");
     }
 
-    // 更新字段
+    // 检查是否修改了账号名称，如果修改了需要检查无主账号合并
+    boolean accountNameChanged = false;
+    String newAccountName = null;
     if (request.getAccountName() != null && !request.getAccountName().trim().isEmpty()) {
-      account.setAccountName(request.getAccountName().trim());
+      newAccountName = request.getAccountName().trim();
+      accountNameChanged = !newAccountName.equals(account.getAccountName());
     }
-    if (request.getPowerValue() != null) {
-      account.setPowerValue(request.getPowerValue());
+
+    // 如果修改了账号名称且账号属于联盟，检查是否有同名无主账号需要合并
+    if (accountNameChanged && account.getAllianceId() != null) {
+      Optional<GameAccount> unownedAccount =
+          gameAccountRepository.findByAllianceIdAndAccountName(
+              account.getAllianceId(), newAccountName);
+
+      if (unownedAccount.isPresent() && unownedAccount.get().getUserId() == null) {
+        // 找到同名的无主账号，进行合并
+        log.info(
+            "发现同名无主账号，开始合并：无主账号ID={}, 用户账号ID={}", unownedAccount.get().getId(), account.getId());
+
+        // 合并无主账号到用户账号
+        account = mergeUnownedAccountToUserAccount(account, unownedAccount.get());
+
+        // 更新账号名称
+        account.setAccountName(newAccountName);
+
+        log.info("无主账号合并完成，账号名称已更新为: {}", newAccountName);
+      } else {
+        // 没有同名无主账号，正常更新账号名称
+        account.setAccountName(newAccountName);
+      }
+    } else if (accountNameChanged) {
+      // 账号不属于联盟或没有修改名称，正常更新
+      account.setAccountName(newAccountName);
     }
+
+    // 更新其他字段
     if (request.getDamageBonus() != null) {
       account.setDamageBonus(request.getDamageBonus());
     }
@@ -143,9 +175,6 @@ public class GameAccountService {
     if (request.getLvbuStarLevel() != null) {
       account.setLvbuStarLevel(request.getLvbuStarLevel());
     }
-    if (request.getMemberTier() != null) {
-      account.setMemberTier(request.getMemberTier());
-    }
 
     return gameAccountRepository.save(account);
   }
@@ -159,7 +188,7 @@ public class GameAccountService {
             .orElseThrow(() -> new BusinessException("游戏账号不存在"));
 
     // 验证是否为账号所有者
-    if (!account.getUserId().equals(userId)) {
+    if (account.getUserId() == null || !account.getUserId().equals(userId)) {
       throw new BusinessException("只能删除自己的账号");
     }
 
@@ -245,7 +274,7 @@ public class GameAccountService {
             .orElseThrow(() -> new BusinessException("游戏账号不存在"));
 
     // 验证权限：账号所有者或所在联盟盟主可以更新
-    boolean canUpdate = account.getUserId().equals(userId);
+    boolean canUpdate = account.getUserId() != null && account.getUserId().equals(userId);
     if (!canUpdate && account.getAllianceId() != null) {
       Alliance alliance = allianceRepository.findById(account.getAllianceId()).orElse(null);
       canUpdate = alliance != null && alliance.getLeaderId().equals(userId);
@@ -299,5 +328,104 @@ public class GameAccountService {
         }
       }
     }
+  }
+
+  /**
+   * 将无主账号的信息合并到用户账号中，并转移所有关联记录
+   *
+   * @param userAccount 用户的原有账号
+   * @param unownedAccount 无主账号
+   * @return 更新后的用户账号
+   */
+  @Transactional
+  protected GameAccount mergeUnownedAccountToUserAccount(
+      GameAccount userAccount, GameAccount unownedAccount) {
+    log.info("开始合并无主账号 {} 到用户账号 {}", unownedAccount.getId(), userAccount.getId());
+
+    // 1. 复制无主账号的非空字段到用户账号
+    if (unownedAccount.getPowerValue() != null) {
+      userAccount.setPowerValue(unownedAccount.getPowerValue());
+    }
+    if (unownedAccount.getDamageBonus() != null) {
+      userAccount.setDamageBonus(unownedAccount.getDamageBonus());
+    }
+    if (unownedAccount.getTroopLevel() != null) {
+      userAccount.setTroopLevel(unownedAccount.getTroopLevel());
+    }
+    if (unownedAccount.getRallyCapacity() != null) {
+      userAccount.setRallyCapacity(unownedAccount.getRallyCapacity());
+    }
+    if (unownedAccount.getTroopQuantity() != null) {
+      userAccount.setTroopQuantity(unownedAccount.getTroopQuantity());
+    }
+    if (unownedAccount.getInfantryDefense() != null) {
+      userAccount.setInfantryDefense(unownedAccount.getInfantryDefense());
+    }
+    if (unownedAccount.getInfantryHp() != null) {
+      userAccount.setInfantryHp(unownedAccount.getInfantryHp());
+    }
+    if (unownedAccount.getArcherAttack() != null) {
+      userAccount.setArcherAttack(unownedAccount.getArcherAttack());
+    }
+    if (unownedAccount.getArcherSiege() != null) {
+      userAccount.setArcherSiege(unownedAccount.getArcherSiege());
+    }
+    if (unownedAccount.getLvbuStarLevel() != null) {
+      userAccount.setLvbuStarLevel(unownedAccount.getLvbuStarLevel());
+    }
+    if (unownedAccount.getMemberTier() != null) {
+      userAccount.setMemberTier(unownedAccount.getMemberTier());
+    }
+    if (unownedAccount.getBarbarianGroupId() != null) {
+      userAccount.setBarbarianGroupId(unownedAccount.getBarbarianGroupId());
+    }
+
+    // 设置联盟信息（如果用户账号还没有加入联盟）
+    if (userAccount.getAllianceId() == null) {
+      userAccount.setAllianceId(unownedAccount.getAllianceId());
+    }
+
+    // 2. 转移所有关联记录
+    Long unownedAccountId = unownedAccount.getId();
+    Long userAccountId = userAccount.getId();
+
+    // 转移联盟申请记录
+    allianceApplicationRepository.transferToAccount(unownedAccountId, userAccountId);
+    entityManager.flush(); // 强制执行SQL
+    log.info("已转移联盟申请记录");
+
+    // 转移战事申请记录
+    warApplicationRepository.transferToAccount(unownedAccountId, userAccountId);
+    entityManager.flush(); // 强制执行SQL
+    log.info("已转移战事申请记录");
+
+    // 转移战事安排记录
+    warArrangementRepository.transferToAccount(unownedAccountId, userAccountId);
+    entityManager.flush(); // 强制执行SQL
+    log.info("已转移战事安排记录");
+
+    // 转移官职预约记录
+    positionReservationRepository.transferToAccount(unownedAccountId, userAccountId);
+    entityManager.flush(); // 强制执行SQL
+    log.info("已转移官职预约记录");
+
+    // 转移马车排队记录
+    carriageQueueRepository.transferToAccount(unownedAccountId, userAccountId);
+    entityManager.flush(); // 强制执行SQL
+    log.info("已转移马车排队记录");
+
+    // 3. 保存更新后的用户账号
+    GameAccount savedUserAccount = gameAccountRepository.save(userAccount);
+
+    // 4. 删除无主账号
+    gameAccountRepository.delete(unownedAccount);
+    entityManager.flush(); // 强制执行SQL
+
+    // 5. 清除EntityManager缓存，确保后续查询从数据库获取最新数据
+    entityManager.clear();
+    log.info("已删除无主账号 {}", unownedAccountId);
+
+    log.info("账号合并完成，用户账号 {} 已获得无主账号的所有信息和关联记录", userAccountId);
+    return savedUserAccount;
   }
 }
