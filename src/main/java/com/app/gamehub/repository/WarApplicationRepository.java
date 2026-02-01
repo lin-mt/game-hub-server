@@ -22,6 +22,8 @@ public interface WarApplicationRepository extends JpaRepository<WarApplication, 
   List<WarApplication> findByAccountIdInAndWarTypeAndStatus(
       Collection<Long> accountIds, WarType warType, WarApplication.ApplicationStatus status);
 
+  List<WarApplication> findByAccountIdAndWarTypeIn(Long accountId, Collection<WarType> warTypes);
+
   boolean existsByAccountIdAndWarTypeIn(Long accountId, Collection<WarType> warTypes);
 
   void deleteAllByAccountId(Long id);

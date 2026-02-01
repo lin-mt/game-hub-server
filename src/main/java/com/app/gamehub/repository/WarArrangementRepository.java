@@ -17,6 +17,9 @@ public interface WarArrangementRepository extends JpaRepository<WarArrangement, 
   List<WarArrangement> findByAllianceIdAndWarTypeOrderByCreatedAtDesc(
       Long allianceId, WarType warType);
 
+  List<WarArrangement> findByAllianceIdAndWarTypeIn(
+      Long allianceId, Collection<WarType> warTypes);
+
   List<WarArrangement> findByAllianceIdOrderByCreatedAtAsc(Long allianceId);
 
   List<WarArrangement> findByWarGroupIdOrderByCreatedAtAsc(Long warGroupId);

@@ -38,6 +38,8 @@ class WarServiceUseTacticTest {
     private WarArrangementRepository warArrangementRepository;
     @Mock
     private WarGroupRepository warGroupRepository;
+    @Mock
+    private TacticTemplateRepository tacticTemplateRepository;
 
     @InjectMocks
     private WarService warService;
@@ -105,10 +107,14 @@ class WarServiceUseTacticTest {
         doReturn(Optional.of(testAlliance)).when(allianceRepository).findById(allianceId);
         doReturn(existingArrangements).when(warArrangementRepository)
             .findByAllianceIdAndWarTypeOrderByCreatedAtDesc(allianceId, WarType.GUANDU_ONE);
-        doReturn(Arrays.asList(testAccount1, testAccount2, testAccount3)).when(gameAccountRepository).findAllById(anyList());
-        doReturn(Arrays.asList(testApplication1, testApplication2, testApplication3))
+        doReturn(Arrays.asList(testApplication3, testApplication2, testApplication1))
+            .when(warApplicationRepository).findByAllianceIdAndWarTypeAndStatusOrderByCreatedAtAsc(
+                allianceId, WarType.GUANDU_ONE, WarApplication.ApplicationStatus.APPROVED);
+        doReturn(Arrays.asList(testAccount3, testAccount2, testAccount1)).when(gameAccountRepository).findAllById(anyList());
+        doReturn(Arrays.asList(testApplication3, testApplication2, testApplication1))
             .when(warApplicationRepository).findByAccountIdInAndWarTypeAndStatus(
                 anyList(), eq(WarType.GUANDU_ONE), eq(WarApplication.ApplicationStatus.APPROVED));
+        doReturn(Optional.empty()).when(tacticTemplateRepository).findByTacticKey("TACTIC_ONE");
 
         // When
         try (MockedStatic<UserContext> mockedUserContext = mockStatic(UserContext.class)) {
@@ -122,9 +128,9 @@ class WarServiceUseTacticTest {
         verify(warArrangementRepository).deleteAll(existingArrangements);
         verify(warGroupRepository).deleteByAllianceIdAndWarType(allianceId, WarType.GUANDU_ONE);
         
-        // 验证获取了申请时间信息（使用 anyCollection 因为实际传入的是 HashSet）
-        verify(warApplicationRepository).findByAccountIdInAndWarTypeAndStatus(
-            anyCollection(), eq(WarType.GUANDU_ONE), eq(WarApplication.ApplicationStatus.APPROVED));
+        // 验证获取了申请时间信息
+        verify(warApplicationRepository).findByAllianceIdAndWarTypeAndStatusOrderByCreatedAtAsc(
+            allianceId, WarType.GUANDU_ONE, WarApplication.ApplicationStatus.APPROVED);
     }
 
     private WarArrangement createWarArrangement(Long accountId, Long allianceId) {

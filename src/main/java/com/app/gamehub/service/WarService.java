@@ -377,12 +377,29 @@ public class WarService {
       throw new BusinessException("账号不能同时参加官渡一和官渡二");
     }
     WarArrangement warArrangement = arrangements.get(0);
+    
+    WarType newWarType;
     if (warArrangement.getWarType().equals(WarType.GUANDU_ONE)) {
-      warArrangement.setWarType(WarType.GUANDU_TWO);
+      newWarType = WarType.GUANDU_TWO;
     } else {
-      warArrangement.setWarType(WarType.GUANDU_ONE);
+      newWarType = WarType.GUANDU_ONE;
     }
+    
+    // 更新战事安排的类型
+    warArrangement.setWarType(newWarType);
+    // 移动时清除分组信息，等待下次应用战术时重新分配
     warArrangement.setWarGroupId(null);
+    
+    // 同时更新对应的战事申请的类型
+    List<WarApplication> applications = warApplicationRepository.findByAccountIdAndWarTypeIn(
+        accountId, List.of(WarType.GUANDU_ONE, WarType.GUANDU_TWO));
+    for (WarApplication application : applications) {
+      if (application.getStatus() == WarApplication.ApplicationStatus.APPROVED) {
+        application.setWarType(newWarType);
+        warApplicationRepository.save(application);
+      }
+    }
+    
     warArrangementRepository.save(warArrangement);
     return warArrangement;
   }
