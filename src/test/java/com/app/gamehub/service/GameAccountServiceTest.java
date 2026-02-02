@@ -69,7 +69,6 @@ class GameAccountServiceTest {
 
         updateRequest = new UpdateGameAccountRequest();
         updateRequest.setAccountName("Updated Account");
-        updateRequest.setPowerValue(2000000L);
         updateRequest.setTroopQuantity(800L); // Test updating troop quantity
         updateRequest.setLvbuStarLevel(BigDecimal.valueOf(4.0));
         updateRequest.setInfantryDefense(130);
@@ -82,7 +81,6 @@ class GameAccountServiceTest {
         existingAccount.setUserId(100L);
         existingAccount.setServerId(1);
         existingAccount.setAccountName("Existing Account");
-        existingAccount.setPowerValue(1500000L);
         existingAccount.setTroopQuantity(600L);
         existingAccount.setLvbuStarLevel(BigDecimal.valueOf(3.0));
         existingAccount.setInfantryDefense(110);
