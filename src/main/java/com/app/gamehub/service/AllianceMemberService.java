@@ -284,6 +284,7 @@ public class AllianceMemberService {
   private AllianceMemberSummaryDto toDto(GameAccount a) {
     AllianceMemberSummaryDto d = new AllianceMemberSummaryDto();
     d.setId(a.getId());
+    d.setUserId(a.getUserId());
     d.setMemberTier(a.getMemberTier() != null ? a.getMemberTier().name() : null);
     d.setAccountName(a.getAccountName());
     d.setLvbuStarLevel(a.getLvbuStarLevel());
@@ -321,6 +322,7 @@ public class AllianceMemberService {
     AllianceMemberExportDto d = new AllianceMemberExportDto();
     d.setServerId(a.getServerId());
     d.setAccountName(a.getAccountName());
+    d.setRegistrationStatus(a.getUserId() != null ? "已注册" : "未注册");
     d.setMemberTier(a.getMemberTier() != null ? translateTier(a.getMemberTier()) : null);
     d.setLvbuStarLevel(a.getLvbuStarLevel());
     d.setDamageBonus(a.getDamageBonus());

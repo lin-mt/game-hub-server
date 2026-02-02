@@ -11,6 +11,9 @@ public class AllianceMemberSummaryDto {
   @Schema(description = "账号ID")
   private Long id;
 
+  @Schema(description = "用户ID")
+  private Long userId;
+
   @Schema(description = "阶位")
   private String memberTier;
 

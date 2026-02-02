@@ -725,6 +725,7 @@ public class WarService {
       d.setIsSubstitute(Boolean.TRUE.equals(a.getIsSubstitute()) ? "替补" : "主力");
       if (acc != null) {
         d.setAccountName(acc.getAccountName());
+        d.setRegistrationStatus(acc.getUserId() != null ? "已注册" : "未注册");
         d.setMemberTier(acc.getMemberTier() != null ? translateTier(acc.getMemberTier()) : null);
         d.setPowerValue(acc.getPowerValue());
         d.setTroopLevel(acc.getTroopLevel());

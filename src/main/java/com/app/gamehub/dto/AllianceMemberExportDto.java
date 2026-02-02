@@ -12,6 +12,9 @@ public class AllianceMemberExportDto {
     @ExcelProperty("账号名称")
     private String accountName;
 
+    @ExcelProperty("注册状态")
+    private String registrationStatus;
+
     @ExcelProperty("阶位")
     private String memberTier;
 

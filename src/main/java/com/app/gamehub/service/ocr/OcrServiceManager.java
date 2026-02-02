@@ -43,10 +43,6 @@ public class OcrServiceManager {
 
     log.info("开始OCR识别，可用服务商数量: {}", availableServices.size());
 
-    if (availableServices.size() > 1) {
-      return new HashMap<>();
-    }
-
     // 使用轮询策略选择服务
     Exception lastException = null;
     int attempts = 0;
