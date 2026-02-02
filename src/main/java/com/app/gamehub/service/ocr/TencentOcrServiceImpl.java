@@ -2,6 +2,7 @@ package com.app.gamehub.service.ocr;
 
 import com.app.gamehub.entity.OcrQuota;
 import com.app.gamehub.exception.BusinessException;
+import com.app.gamehub.exception.OcrAttributeException;
 import com.app.gamehub.repository.OcrQuotaRepository;
 import com.tencentcloudapi.common.Credential;
 import com.tencentcloudapi.common.exception.TencentCloudSDKException;
@@ -51,7 +52,7 @@ public class TencentOcrServiceImpl implements OcrService {
   public Map<String, Integer> parseStats(File imageFile) throws Exception {
     // 检查密钥配置
     if (SECRET_ID == null || SECRET_KEY == null) {
-      throw new BusinessException("腾讯云OCR密钥未配置");
+      throw new BusinessException("OCR密钥未配置");
     }
 
     String currentMonth = java.time.YearMonth.now().toString();
@@ -70,7 +71,7 @@ public class TencentOcrServiceImpl implements OcrService {
           quotaRepository.findAvailableQuotasByProviderAndMonth(PROVIDER_NAME, currentMonth);
 
       if (availableQuotas.isEmpty()) {
-        throw new BusinessException("腾讯云OCR服务的免费额度已用完");
+        throw new BusinessException("OCR服务的免费额度已用完");
       }
 
       // 尝试使用每个可用的服务
@@ -92,6 +93,10 @@ public class TencentOcrServiceImpl implements OcrService {
           log.info("腾讯云OCR识别成功，使用服务: {}", quota.getServiceType());
           return result;
 
+        } catch (OcrAttributeException oae) {
+          // 属性数据错误，直接抛出不再尝试其他服务
+          log.error("腾讯云OCR服务 {} 属性数据错误，直接抛出异常", quota.getServiceType(), oae);
+          throw oae;
         } catch (BusinessException be) {
           lastException = be;
           log.warn("腾讯云OCR服务 {} 识别失败: {}", quota.getServiceType(), be.getMessage());
@@ -108,7 +113,7 @@ public class TencentOcrServiceImpl implements OcrService {
         }
       }
 
-      throw new BusinessException("腾讯云OCR所有服务都不可用: " + lastException.getMessage());
+      throw new BusinessException("OCR所有服务都不可用: " + (lastException != null ? lastException.getMessage() : "未知错误"));
     } finally {
       // 清理裁剪后的临时文件
       if (croppedFile != null && croppedFile.exists()) {
@@ -222,15 +227,15 @@ public class TencentOcrServiceImpl implements OcrService {
       if (e.getMessage().contains("quota")
           || e.getMessage().contains("limit")
           || e.getMessage().contains("exceed")) {
-        throw new BusinessException("腾讯云OCR服务 " + serviceType.getName() + " 额度已用完");
+        throw new BusinessException("OCR服务额度已用完");
       }
 
       // 检查是否是QPS限制错误
       if (e.getMessage().contains("rate") || e.getMessage().contains("throttle")) {
-        throw new BusinessException("腾讯云OCR服务 " + serviceType.getName() + " QPS限制");
+        throw new BusinessException("OCR服务QPS限制");
       }
 
-      throw new BusinessException("腾讯云OCR识别失败: " + e.getMessage());
+      throw new BusinessException("OCR识别失败: " + e.getMessage());
     }
   }
 
@@ -376,7 +381,7 @@ public class TencentOcrServiceImpl implements OcrService {
 
     int count = values.size();
     if (count < 11) {
-      throw new BusinessException("属性数据错误，应该至少包含11个属性");
+      throw new OcrAttributeException("属性数据错误，确认图片中包含步兵防御力和弓兵生命值属性信息");
     }
 
     List<Integer> tail = count > 12 ? values.subList(count - 12, count) : values;

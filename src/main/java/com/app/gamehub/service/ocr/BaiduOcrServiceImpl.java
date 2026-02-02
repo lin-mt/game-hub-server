@@ -2,6 +2,7 @@ package com.app.gamehub.service.ocr;
 
 import com.app.gamehub.entity.OcrQuota;
 import com.app.gamehub.exception.BusinessException;
+import com.app.gamehub.exception.OcrAttributeException;
 import com.app.gamehub.repository.OcrQuotaRepository;
 import java.io.File;
 import java.io.IOException;
@@ -85,7 +86,7 @@ public class BaiduOcrServiceImpl implements OcrService {
           quotaRepository.findAvailableQuotasByProviderAndMonth(PROVIDER_NAME, currentMonth);
 
       if (availableQuotas.isEmpty()) {
-        throw new BusinessException("百度OCR服务的免费额度已用完");
+        throw new BusinessException("OCR服务的免费额度已用完");
       }
 
       // 尝试使用每个可用的服务
@@ -107,6 +108,10 @@ public class BaiduOcrServiceImpl implements OcrService {
           log.info("百度OCR识别成功，使用服务: {}", quota.getServiceType());
           return result;
 
+        } catch (OcrAttributeException oae) {
+          // 属性数据错误，直接抛出不再尝试其他服务
+          log.error("百度OCR服务 {} 属性数据错误，直接抛出异常", quota.getServiceType(), oae);
+          throw oae;
         } catch (BusinessException be) {
           lastException = be;
           log.warn("百度OCR服务 {} 识别失败: {}", quota.getServiceType(), be.getMessage());
@@ -116,17 +121,14 @@ public class BaiduOcrServiceImpl implements OcrService {
           }
           if (be.getMessage().contains("额度")) {
             markQuotaExhausted(quota.getId());
-            continue;
           }
-          continue;
         } catch (Exception e) {
           lastException = e;
           log.warn("百度OCR服务 {} 调用异常: {}", quota.getServiceType(), e.getMessage());
-          continue;
         }
       }
 
-      throw new BusinessException("百度OCR所有服务都不可用: " + lastException.getMessage());
+      throw new BusinessException("OCR所有服务都不可用: " + (lastException != null ? lastException.getMessage() : "未知错误"));
     } finally {
       // 清理裁剪后的临时文件
       if (croppedFile != null && croppedFile.exists()) {
@@ -204,11 +206,11 @@ public class BaiduOcrServiceImpl implements OcrService {
       String errorMsg = jsonResponse.optString("error_msg", "未知错误");
 
       if (errorCode == 18) {
-        throw new BusinessException("百度OCR QPS超限");
+        throw new BusinessException("OCR服务QPS超限");
       } else if (errorCode == 4 || errorCode == 17 || errorCode == 19) {
-        throw new BusinessException("百度OCR免费额度已用完");
+        throw new BusinessException("OCR服务免费额度已用完");
       } else {
-        throw new BusinessException("百度OCR识别失败: " + errorMsg);
+        throw new BusinessException("OCR识别失败: " + errorMsg);
       }
     }
 
@@ -362,7 +364,7 @@ public class BaiduOcrServiceImpl implements OcrService {
 
     int count = values.size();
     if (count < 11) {
-      throw new BusinessException("属性数据错误，应该至少包含11个属性");
+      throw new OcrAttributeException("属性数据错误，确认图片中包含步兵防御力和弓兵生命值属性信息");
     }
 
     List<Integer> tail = count > 12 ? values.subList(count - 12, count) : values;

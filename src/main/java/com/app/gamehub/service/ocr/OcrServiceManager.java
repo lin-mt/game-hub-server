@@ -1,9 +1,11 @@
 package com.app.gamehub.service.ocr;
 
 import com.app.gamehub.exception.BusinessException;
+import com.app.gamehub.exception.OcrAttributeException;
 import com.app.gamehub.util.GameStatOcrUtil;
 import java.io.File;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -41,6 +43,10 @@ public class OcrServiceManager {
 
     log.info("开始OCR识别，可用服务商数量: {}", availableServices.size());
 
+    if (availableServices.size() > 1) {
+      return new HashMap<>();
+    }
+
     // 使用轮询策略选择服务
     Exception lastException = null;
     int attempts = 0;
@@ -70,6 +76,10 @@ public class OcrServiceManager {
         log.info("OCR识别成功，使用服务商: {}", service.getProviderName());
         return result;
 
+      } catch (OcrAttributeException oae) {
+        // 属性数据错误，不可挽回，直接抛出
+        log.error("OCR服务商 {} 属性数据错误，直接抛出异常", service.getProviderName(), oae);
+        throw oae;
       } catch (BusinessException be) {
         lastException = be;
         log.warn("OCR服务商 {} 识别失败: {}", service.getProviderName(), be.getMessage());
