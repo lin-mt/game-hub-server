@@ -40,6 +40,11 @@ public interface WarArrangementRepository extends JpaRepository<WarArrangement, 
 
   void deleteAllByAccountId(Long id);
 
+  @Modifying
+  @Transactional
+  @Query("DELETE FROM WarArrangement wa WHERE wa.accountId IN :ids")
+  void deleteAllByAccountIdIn(@Param("ids") java.util.Collection<Long> ids);
+
   void deleteByAccountIdAndWarType(Long id, WarType type);
 
   boolean existsByAccountIdAndWarTypeIn(Long id, Collection<WarType> types);

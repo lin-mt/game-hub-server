@@ -28,6 +28,11 @@ public interface WarApplicationRepository extends JpaRepository<WarApplication, 
 
   void deleteAllByAccountId(Long id);
 
+  @Modifying
+  @Transactional
+  @Query("DELETE FROM WarApplication wa WHERE wa.accountId IN :ids")
+  void deleteAllByAccountIdIn(@Param("ids") java.util.Collection<Long> ids);
+
   void deleteAllByAllianceId(Long id);
 
   void deleteByAccountIdAndWarType(Long accountId, WarType warType);

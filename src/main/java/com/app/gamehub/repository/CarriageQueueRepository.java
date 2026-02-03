@@ -71,4 +71,9 @@ public interface CarriageQueueRepository extends JpaRepository<CarriageQueue, Lo
       "UPDATE CarriageQueue cq SET cq.accountId = :newAccountId WHERE cq.accountId = :oldAccountId")
   void transferToAccount(
       @Param("oldAccountId") Long oldAccountId, @Param("newAccountId") Long newAccountId);
+
+  @Modifying
+  @Transactional
+  @Query("DELETE FROM CarriageQueue cq WHERE cq.accountId IN :ids")
+  void deleteByAccountIdIn(@Param("ids") java.util.Collection<Long> ids);
 }

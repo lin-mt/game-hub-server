@@ -20,9 +20,12 @@ import jakarta.persistence.EntityManager;
 import java.io.File;
 import java.math.BigDecimal;
 import java.nio.file.Files;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -358,6 +361,54 @@ public class GameAccountService {
     gameAccountRepository.delete(account);
 
     log.info("游戏账号删除完成 ID: {}", accountId);
+  }
+
+  /**
+   * 系统级别：批量删除指定账号（预期用于删除无主账号），不做账号所有者校验。
+   * 会清理相关关联记录并删除账号实体。注意：只能用于内部清理无主账号场景。
+   */
+  @Transactional(rollbackFor = Exception.class)
+  public void deleteGameAccountsBatchAsSystem(Collection<Long> accountIds) {
+    if (accountIds == null || accountIds.isEmpty()) return;
+
+    // 1. 删除官职预约
+    positionReservationRepository.deleteByAccountIdIn(accountIds);
+    positionReservationRepository.flush();
+
+    // 2. 删除战事申请
+    warApplicationRepository.deleteAllByAccountIdIn(accountIds);
+    warApplicationRepository.flush();
+
+    // 3. 删除战事安排
+    warArrangementRepository.deleteAllByAccountIdIn(accountIds);
+    warArrangementRepository.flush();
+
+    // 4. 删除联盟申请
+    allianceApplicationRepository.deleteAllByAccountIdIn(accountIds);
+    allianceApplicationRepository.flush();
+
+    // 5. 删除马车排队记录
+    carriageQueueRepository.deleteByAccountIdIn(accountIds);
+    carriageQueueRepository.flush();
+
+    // 6. 处理南蛮分组：删除因为这些账号删除而变空的分组
+    // 查询受影响的分组
+    List<com.app.gamehub.entity.GameAccount> accounts = gameAccountRepository.findAllById(accountIds);
+    Set<Long> groupIds = new HashSet<>();
+    for (com.app.gamehub.entity.GameAccount a : accounts) {
+      if (a.getBarbarianGroupId() != null) groupIds.add(a.getBarbarianGroupId());
+    }
+    // 删除账号
+    gameAccountRepository.deleteAllByIdInBatch(accountIds);
+    gameAccountRepository.flush();
+
+    // 对这些分组重新计数，若为空则删除
+    for (Long gid : groupIds) {
+      long cnt = barbarianGroupRepository.countMembersByGroupId(gid);
+      if (cnt == 0) {
+        barbarianGroupRepository.deleteById(gid);
+      }
+    }
   }
 
   public List<GameAccount> getUserGameAccounts() {

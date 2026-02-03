@@ -34,4 +34,9 @@ public interface AllianceApplicationRepository extends JpaRepository<AllianceApp
       "UPDATE AllianceApplication aa SET aa.accountId = :newAccountId WHERE aa.accountId = :oldAccountId")
   void transferToAccount(
       @Param("oldAccountId") Long oldAccountId, @Param("newAccountId") Long newAccountId);
+
+  @Modifying
+  @Transactional
+  @Query("DELETE FROM AllianceApplication aa WHERE aa.accountId IN :ids")
+  void deleteAllByAccountIdIn(@Param("ids") java.util.Collection<Long> ids);
 }

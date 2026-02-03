@@ -12,6 +12,7 @@ import com.app.gamehub.entity.User;
 import com.app.gamehub.repository.*;
 import com.app.gamehub.util.UserContext;
 import jakarta.persistence.EntityManager;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,6 +47,8 @@ public class AllianceMemberServiceUnownedAccountTest {
   @Mock private CarriageQueueRepository carriageQueueRepository;
 
   @Mock private EntityManager entityManager;
+
+  @Mock private GameAccountService gameAccountService;
 
   private Alliance testAlliance;
   private User testUser;
@@ -89,11 +92,8 @@ public class AllianceMemberServiceUnownedAccountTest {
 
     // Mock behavior for bulk update
     when(allianceRepository.findById(testAlliance.getId())).thenReturn(Optional.of(testAlliance));
-    when(gameAccountRepository.findByAllianceIdAndAccountName(testAlliance.getId(), "测试账号"))
-        .thenReturn(Optional.of(testAccount));
-    when(gameAccountRepository.findByAllianceIdAndAccountName(testAlliance.getId(), "不存在账号"))
-        .thenReturn(Optional.empty());
-    when(gameAccountRepository.save(any(GameAccount.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(gameAccountRepository.findByAllianceId(testAlliance.getId())).thenReturn(List.of(testAccount));
+    when(gameAccountRepository.saveAll(any(List.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
     try (MockedStatic<UserContext> mockedUserContext = mockStatic(UserContext.class)) {
       mockedUserContext.when(UserContext::getUserId).thenReturn(testUser.getId());
@@ -106,13 +106,16 @@ public class AllianceMemberServiceUnownedAccountTest {
       assertTrue(result.contains("已创建无主账号数: 1"));
 
       // 验证无主账号被创建
-      verify(gameAccountRepository, atLeastOnce()).save(argThat(account -> 
-          account.getUserId() == null &&
-          account.getAllianceId().equals(testAlliance.getId()) &&
-          account.getAccountName().equals("不存在账号") &&
-          account.getMemberTier() == GameAccount.MemberTier.TIER_2 &&
-          account.getPowerValue().equals(80L)
-      ));
+      verify(gameAccountRepository, atLeastOnce()).saveAll(argThat(accounts -> {
+        List<GameAccount> accountList = (List<GameAccount>) accounts;
+        return accountList.stream().anyMatch(account -> 
+            account.getUserId() == null &&
+            account.getAllianceId().equals(testAlliance.getId()) &&
+            account.getAccountName().equals("不存在账号") &&
+            account.getMemberTier() == GameAccount.MemberTier.TIER_2 &&
+            account.getPowerValue().equals(80L)
+        );
+      }));
     }
   }
 

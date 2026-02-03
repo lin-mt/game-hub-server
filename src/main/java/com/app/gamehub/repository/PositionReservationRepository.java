@@ -55,6 +55,11 @@ public interface PositionReservationRepository extends JpaRepository<PositionRes
   @Query("DELETE FROM PositionReservation pr WHERE pr.accountId = :accountId")
   void deleteByAccountId(@Param("accountId") Long accountId);
 
+  @Modifying
+  @Transactional
+  @Query("DELETE FROM PositionReservation pr WHERE pr.accountId IN :ids")
+  void deleteByAccountIdIn(@Param("ids") java.util.Collection<Long> ids);
+
   /** 将指定账号的所有官职预约记录转移到另一个账号 */
   @Modifying
   @Transactional

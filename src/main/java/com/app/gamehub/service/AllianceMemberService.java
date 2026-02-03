@@ -24,7 +24,9 @@ import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -46,6 +48,7 @@ public class AllianceMemberService {
   private final PositionReservationRepository positionReservationRepository;
   private final CarriageQueueRepository carriageQueueRepository;
   private final EntityManager entityManager;
+  private final GameAccountService gameAccountService;
 
   public AllianceMemberService(
       AllianceRepository allianceRepository,
@@ -56,7 +59,8 @@ public class AllianceMemberService {
       BarbarianGroupRepository barbarianGroupRepository,
       PositionReservationRepository positionReservationRepository,
       CarriageQueueRepository carriageQueueRepository,
-      EntityManager entityManager) {
+      EntityManager entityManager,
+      GameAccountService gameAccountService) {
     this.allianceRepository = allianceRepository;
     this.gameAccountRepository = gameAccountRepository;
     this.applicationRepository = applicationRepository;
@@ -66,6 +70,7 @@ public class AllianceMemberService {
     this.positionReservationRepository = positionReservationRepository;
     this.carriageQueueRepository = carriageQueueRepository;
     this.entityManager = entityManager;
+    this.gameAccountService = gameAccountService;
   }
 
   @Transactional
@@ -114,7 +119,7 @@ public class AllianceMemberService {
 
     if (unownedAccount.isPresent() && unownedAccount.get().getUserId() == null) {
       // 找到同名的无主账号，将其信息合并到用户账号中
-      GameAccount mergedAccount = mergeUnownedAccountToUserAccount(account, unownedAccount.get());
+      mergeUnownedAccountToUserAccount(account, unownedAccount.get());
       log.info("用户 {} 通过同名无主账号直接加入联盟 {}", UserContext.getUserId(), alliance.getId());
       return null;
     }
@@ -182,7 +187,7 @@ public class AllianceMemberService {
 
       if (unownedAccount.isPresent() && unownedAccount.get().getUserId() == null) {
         // 找到同名的无主账号，将其信息合并到用户账号中
-        GameAccount mergedAccount = mergeUnownedAccountToUserAccount(account, unownedAccount.get());
+        mergeUnownedAccountToUserAccount(account, unownedAccount.get());
         log.info("用户 {} 通过同名无主账号加入联盟 {}", account.getUserId(), alliance.getId());
       } else {
         // 正常加入联盟流程
@@ -367,7 +372,8 @@ public class AllianceMemberService {
     String[] lines = rawText.split("\\r?\\n");
     int updatedCount = 0;
     int createdCount = 0;
-    List<String> notFoundNames = new ArrayList<>();
+    // 临时容器：解析后的导入成员（按名字去重，保证顺序）
+    Map<String, ParsedMember> importedMap = new LinkedHashMap<>();
 
     // 现在姓名不会包含空格：使用更简单的正则
     // 格式：行号 + 多空格 + 姓名(非空格) + 多空格 + 阶位(数字) + 多空格 + 火炉等级 + 多空格 + 战力(任意位数数字, 允许千位分隔)
@@ -383,31 +389,109 @@ public class AllianceMemberService {
       if (trimmed.contains("成员名称") || trimmed.contains("阶级") || trimmed.startsWith("成员")) continue;
 
       Matcher m = linePattern.matcher(line);
+      String name;
+      String tierStr;
+      String powerStr;
       if (!m.find()) {
-        // 可能是表头或无法解析的行，尝试从分隔符拆分
+        // 尝试从空白分隔的列中解析
         String[] parts = trimmed.split("\\s+");
-        // 期望至少 8 列：index,name,tier,furnace,power,week,total,contrib；姓名不包含空格，所以 parts[1] 是姓名
         if (parts.length < 8) continue;
-        String name = parts[1];
+        name = parts[1].trim();
         if (name.isBlank() || name.matches("^\\d+$")) continue;
-        String tierStr = parts[2];
-        String powerStr = parts[4]; // index(0),name(1),tier(2),furnace(3),power(4)
-        int result = handleSingleEntry(allianceId, name, tierStr, powerStr, notFoundNames);
-        if (result == 1) updatedCount++;
-        else if (result == 2) createdCount++;
-        continue;
+        tierStr = parts[2];
+        powerStr = parts[4];
+      } else {
+        name = m.group(1).trim();
+        tierStr = m.group(2);
+        powerStr = m.group(3);
+        if (name.isBlank() || name.matches("^\\d+$")) continue;
       }
 
-      String name = m.group(1).trim();
-      String tierStr = m.group(2);
-      String powerStr = m.group(3);
+      // parse tier
+      GameAccount.MemberTier tier = parseTier(tierStr);
+      // parse power
+      String cleanedPower = powerStr.replaceAll(",", "");
+      Long power = null;
+      try {
+        power = Long.parseLong(cleanedPower);
+      } catch (Exception e) {
+        // ignore malformed power, keep as null
+      }
 
-      // 姓名不会包含空格，若为空或是纯数字则跳过
-      if (name.isBlank() || name.matches("^\\d+$")) continue;
+      // dedupe: keep first occurrence
+      String key = name.trim();
+      if (!importedMap.containsKey(key)) {
+        importedMap.put(key, new ParsedMember(key, tier, power));
+      }
+    }
 
-      int result = handleSingleEntry(allianceId, name, tierStr, powerStr, notFoundNames);
-      if (result == 1) updatedCount++;
-      else if (result == 2) createdCount++;
+    // If no parsed members, return early
+    if (importedMap.isEmpty()) {
+      return "已更新成员数: 0。\n";
+    }
+
+    // Fetch all existing members of the alliance in one query
+    List<GameAccount> existingAccounts = gameAccountRepository.findByAllianceId(allianceId);
+    // existingAccounts already contains all members; we'll use it directly
+
+    // Prepare lists for batch operations
+    List<GameAccount> toUpdate = new ArrayList<>();
+    List<GameAccount> toCreate = new ArrayList<>();
+    List<Long> idsToDelete = new ArrayList<>();
+
+    // Determine updates and deletions
+    for (GameAccount ga : existingAccounts) {
+      String existingName = ga.getAccountName() != null ? ga.getAccountName().trim() : null;
+      if (existingName == null) continue;
+      ParsedMember parsed = importedMap.get(existingName);
+      if (parsed != null) {
+        // Update memberTier and power if present
+        if (parsed.tier != null) ga.setMemberTier(parsed.tier);
+        if (parsed.power != null) {
+          long stored;
+          if (parsed.power < 100000L) stored = 1L;
+          else stored = parsed.power / 10000L;
+          ga.setPowerValue(stored);
+        }
+        toUpdate.add(ga);
+        // remove from map to mark as processed
+        importedMap.remove(existingName);
+      } else {
+        // Not in imported list
+        if (ga.getUserId() == null) {
+          idsToDelete.add(ga.getId());
+        }
+      }
+    }
+
+    // Remaining parsed entries in importedMap are creations
+    for (ParsedMember pm : importedMap.values()) {
+      GameAccount newAcc = new GameAccount();
+      newAcc.setUserId(null);
+      newAcc.setServerId(alliance.getServerId());
+      newAcc.setAccountName(pm.name);
+      newAcc.setAllianceId(allianceId);
+      newAcc.setMemberTier(pm.tier);
+      if (pm.power != null) {
+        long stored;
+        if (pm.power < 100000L) stored = 1L;
+        else stored = pm.power / 10000L;
+        newAcc.setPowerValue(stored);
+      }
+      toCreate.add(newAcc);
+    }
+
+    // Execute batch database operations
+    if (!toUpdate.isEmpty()) {
+      gameAccountRepository.saveAll(toUpdate);
+      updatedCount = toUpdate.size();
+    }
+    if (!toCreate.isEmpty()) {
+      gameAccountRepository.saveAll(toCreate);
+      createdCount = toCreate.size();
+    }
+    if (!idsToDelete.isEmpty()) {
+      gameAccountService.deleteGameAccountsBatchAsSystem(idsToDelete);
     }
 
     StringBuilder resultMsg = new StringBuilder();
@@ -420,52 +504,7 @@ public class AllianceMemberService {
     return resultMsg.toString();
   }
 
-  private int handleSingleEntry(
-      Long allianceId, String name, String tierStr, String powerStr, List<String> notFoundNames) {
-    if (name == null || name.isBlank()) return 0;
-
-    // 解析阶级
-    GameAccount.MemberTier tier = parseTier(tierStr);
-
-    // 解析战力（移除逗号），并转为以万为单位的 Long
-    String cleanedPower = powerStr.replaceAll(",", "");
-    Long power = null;
-    try {
-      power = Long.parseLong(cleanedPower);
-    } catch (NumberFormatException e) {
-      // ignore
-    }
-
-    Optional<GameAccount> opt =
-        gameAccountRepository.findByAllianceIdAndAccountName(allianceId, name);
-    if (opt.isEmpty()) {
-      // 账号不存在，创建一个不属于任何用户但属于联盟的账号
-      GameAccount newAccount = createUnownedAllianceAccount(allianceId, name, tier, power);
-      if (newAccount != null) {
-        log.info("为联盟 {} 创建了无主账号: {}", allianceId, name);
-        return 2; // 返回2表示创建了新账号
-      } else {
-        notFoundNames.add(name + " (原始战力:" + powerStr + ")");
-        return 0; // 返回0表示失败
-      }
-    }
-
-    GameAccount account = opt.get();
-    if (tier != null) account.setMemberTier(tier);
-    if (power != null) {
-      long stored;
-      // 如果原始战力少于6位数，则按照要求使用 1
-      if (power < 100000L) {
-        stored = 1L;
-      } else {
-        stored = power / 10000L; // 数据库存以万为单位
-      }
-      account.setPowerValue(stored);
-    }
-
-    gameAccountRepository.save(account);
-    return 1; // 返回1表示更新了现有账号
-  }
+    // handleSingleEntry removed: bulk processing replaced the per-line DB updates
 
   private GameAccount.MemberTier parseTier(String tierStr) {
     if (tierStr == null) return null;
@@ -638,8 +677,21 @@ public class AllianceMemberService {
   public List<GameAccount> getUnownedAccounts(Long allianceId) {
     // 验证联盟是否存在
     allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
-    
+
     // 获取联盟中的无主账号列表（按账号名称排序）
     return gameAccountRepository.findByAllianceIdAndUserIdIsNull(allianceId);
+  }
+
+  // Helper container for parsed import rows
+  private static class ParsedMember {
+    String name;
+    GameAccount.MemberTier tier;
+    Long power; // original parsed power (actual number), will be converted to stored value later
+
+    ParsedMember(String name, GameAccount.MemberTier tier, Long power) {
+      this.name = name;
+      this.tier = tier;
+      this.power = power;
+    }
   }
 }
