@@ -24,10 +24,12 @@ import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -359,7 +361,7 @@ public class AllianceMemberService {
    * 如果账号不存在，则创建一个不属于任何用户但属于联盟的账号
    */
   @Transactional
-  public String bulkUpdateMembersFromText(Long allianceId, String rawText) {
+  public String bulkUpdateMembersFromText(Long allianceId, String rawText, Boolean removeMissing) {
     // 验证联盟存在
     Alliance alliance =
         allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
@@ -438,6 +440,7 @@ public class AllianceMemberService {
     List<GameAccount> toUpdate = new ArrayList<>();
     List<GameAccount> toCreate = new ArrayList<>();
     List<Long> idsToDelete = new ArrayList<>();
+    List<Long> idsToRemove = new ArrayList<>();
 
     // Determine updates and deletions
     for (GameAccount ga : existingAccounts) {
@@ -459,7 +462,12 @@ public class AllianceMemberService {
       } else {
         // Not in imported list
         if (ga.getUserId() == null) {
+          // 无主账号：删除
           idsToDelete.add(ga.getId());
+        } else if (Boolean.TRUE.equals(removeMissing)) {
+          // 如果选择移除不在名单中的成员
+          // 已注册账号：移除出联盟
+          idsToRemove.add(ga.getId());
         }
       }
     }
@@ -491,7 +499,12 @@ public class AllianceMemberService {
       createdCount = toCreate.size();
     }
     if (!idsToDelete.isEmpty()) {
+      // 无主账号：删除
       gameAccountService.deleteGameAccountsBatchAsSystem(idsToDelete);
+    }
+    if (!idsToRemove.isEmpty()) {
+      // 已注册账号：批量移除出联盟
+      removeMembersFromAllianceBatch(idsToRemove);
     }
 
     StringBuilder resultMsg = new StringBuilder();
@@ -499,12 +512,95 @@ public class AllianceMemberService {
     if (createdCount > 0) {
       resultMsg.append("，已创建无主账号数: ").append(createdCount);
     }
+    int removedCount = idsToRemove.size();
+    if (removedCount > 0) {
+      resultMsg.append("，已移除成员数: ").append(removedCount);
+    }
     resultMsg.append("。\n");
 
     return resultMsg.toString();
   }
 
-    // handleSingleEntry removed: bulk processing replaced the per-line DB updates
+  /** 将成员移除出联盟（单个操作，循环调用会多次查询） */
+  private void removeMemberFromAlliance(Long accountId) {
+    GameAccount account =
+        gameAccountRepository
+            .findById(accountId)
+            .orElseThrow(() -> new BusinessException("游戏账号不存在"));
+
+    if (account.getAllianceId() == null) {
+      return; // 已不在联盟中
+    }
+
+    // 处理南蛮分组关联（如果有的话）
+    if (account.getBarbarianGroupId() != null) {
+      Long groupId = account.getBarbarianGroupId();
+      log.info("处理账号 {} 的南蛮分组关联", accountId);
+
+      // 先清空账号的分组关联
+      account.setBarbarianGroupId(null);
+
+      // 检查分组是否还有其他成员，如果没有则删除分组
+      long memberCount = barbarianGroupRepository.countMembersByGroupId(groupId);
+      if (memberCount == 0) {
+        barbarianGroupRepository.deleteById(groupId);
+        log.info("南蛮分组 {} 因无成员而被自动删除", groupId);
+      }
+    }
+
+    // 移除成员
+    account.setAllianceId(null);
+    account.setMemberTier(null);
+    applicationRepository.deleteAllByAccountId(accountId);
+    warApplicationRepository.deleteAllByAccountId(accountId);
+    warArrangementRepository.deleteAllByAccountId(accountId);
+    gameAccountRepository.save(account);
+  }
+
+  /** 批量移除成员出联盟 */
+  private void removeMembersFromAllianceBatch(List<Long> accountIds) {
+    if (accountIds.isEmpty()) {
+      return;
+    }
+    // 批量查询账号
+    List<GameAccount> accounts = gameAccountRepository.findAllById(accountIds);
+    
+    // 收集需要处理的南蛮分组ID
+    Set<Long> groupIdsToCheck = new HashSet<>();
+    
+    for (GameAccount account : accounts) {
+      if (account.getAllianceId() == null) {
+        continue; // 已不在联盟中
+      }
+      
+      // 处理南蛮分组关联
+      if (account.getBarbarianGroupId() != null) {
+        groupIdsToCheck.add(account.getBarbarianGroupId());
+        account.setBarbarianGroupId(null);
+      }
+      
+      // 移除成员
+      account.setAllianceId(null);
+      account.setMemberTier(null);
+    }
+    
+    // 批量更新账号
+    gameAccountRepository.saveAll(accounts);
+    
+    // 批量删除申请和战事安排
+    applicationRepository.deleteAllByAccountIdIn(accountIds);
+    warApplicationRepository.deleteAllByAccountIdIn(accountIds);
+    warArrangementRepository.deleteAllByAccountIdIn(accountIds);
+    
+    // 检查并删除空南蛮分组
+    for (Long groupId : groupIdsToCheck) {
+      long memberCount = barbarianGroupRepository.countMembersByGroupId(groupId);
+      if (memberCount == 0) {
+        barbarianGroupRepository.deleteById(groupId);
+        log.info("南蛮分组 {} 因无成员而被自动删除", groupId);
+      }
+    }
+  }
 
   private GameAccount.MemberTier parseTier(String tierStr) {
     if (tierStr == null) return null;

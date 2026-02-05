@@ -11,5 +11,8 @@ public class BulkUpdateMembersFromTextRequest {
   @NotBlank(message = "文本内容不能为空")
   @Schema(description = "成员信息的原始文本（多行）", example = "...")
   private String rawText;
+
+  @Schema(description = "是否移除不在名单中的成员", example = "false")
+  private Boolean removeMissing = false;
 }
 

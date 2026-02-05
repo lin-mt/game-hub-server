@@ -86,7 +86,8 @@ public class AllianceMemberController {
   public ApiResponse<String> bulkUpdateFromText(
       @Parameter(description = "联盟ID", example = "1") @PathVariable Long allianceId,
       @Valid @RequestBody BulkUpdateMembersFromTextRequest request) {
-    String result = allianceMemberService.bulkUpdateMembersFromText(allianceId, request.getRawText());
+    String result = allianceMemberService.bulkUpdateMembersFromText(
+        allianceId, request.getRawText(), request.getRemoveMissing());
     return ApiResponse.success("批量更新完成", result);
   }
 
