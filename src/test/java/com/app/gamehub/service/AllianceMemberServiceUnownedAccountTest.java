@@ -99,7 +99,7 @@ public class AllianceMemberServiceUnownedAccountTest {
       mockedUserContext.when(UserContext::getUserId).thenReturn(testUser.getId());
 
       // 执行批量更新
-      String result = allianceMemberService.bulkUpdateMembersFromText(testAlliance.getId(), testText);
+      String result = allianceMemberService.bulkUpdateMembersFromText(testAlliance.getId(), testText, Boolean.FALSE);
 
       // 验证结果
       assertTrue(result.contains("已更新成员数: 1"));
