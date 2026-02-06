@@ -9,7 +9,6 @@ import com.app.gamehub.enums.ActivityType;
 import com.app.gamehub.exception.BusinessException;
 import com.app.gamehub.repository.AllianceRepository;
 import com.app.gamehub.repository.GameAccountRepository;
-import com.app.gamehub.repository.UserRepository;
 import com.app.gamehub.util.UserContext;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
@@ -62,6 +61,9 @@ public class AllianceNotificationService {
     int failCount = 0;
 
     for (GameAccount account : members) {
+      if (account.getUserId() == null) {
+        continue;
+      }
       try {
         // 检查账号是否接收通知
         if (!shouldReceiveNotification(account, request.getActivityType())) {
@@ -80,7 +82,7 @@ public class AllianceNotificationService {
             messageSubscriptionService.getSubscriptionCount(account.getUserId());
 
         // 构建备注信息
-        String remark  = String.format("请及时参与活动，剩%d条通知", remainingCount - 1);
+        String remark = String.format("请及时参与活动，剩%d条通知", remainingCount - 1);
 
         // 发送微信通知
         sendWeChatNotification(
