@@ -149,7 +149,7 @@ public enum WarTactic {
                 "官渡开放后："
                     + namesForRanks(accounts, new int[] {6, 12})
                     + " 去敖仓，"
-                    + namesForRanks(accounts, new int[] {26})
+                    + namesForRanks(accounts, new int[] {28})
                     + " 去兵器坊";
             break;
           case 4:
