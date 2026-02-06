@@ -1,8 +1,8 @@
 package com.app.gamehub.service;
 
+import com.app.gamehub.dto.CreateCustomTacticRequest;
 import com.app.gamehub.dto.CustomTacticConfig;
 import com.app.gamehub.dto.CustomTacticResponse;
-import com.app.gamehub.dto.CreateCustomTacticRequest;
 import com.app.gamehub.dto.UpdateCustomTacticRequest;
 import com.app.gamehub.entity.Alliance;
 import com.app.gamehub.entity.TacticTemplate;
@@ -14,7 +14,6 @@ import com.app.gamehub.util.UserContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -45,8 +44,7 @@ public class CustomTacticService {
     template.setTacticKey(buildTacticKey(alliance.getId(), request.getWarType().name()));
 
     CustomTacticConfig config = new CustomTacticConfig();
-    config.setGroups(
-        request.getGroups() != null ? request.getGroups() : new ArrayList<>());
+    config.setGroups(request.getGroups() != null ? request.getGroups() : new ArrayList<>());
     template.setConfigJson(writeConfig(config));
 
     tacticTemplateRepository.save(template);
@@ -63,8 +61,7 @@ public class CustomTacticService {
 
     template.setName(request.getName().trim());
     CustomTacticConfig config = new CustomTacticConfig();
-    config.setGroups(
-        request.getGroups() != null ? request.getGroups() : new ArrayList<>());
+    config.setGroups(request.getGroups() != null ? request.getGroups() : new ArrayList<>());
     template.setConfigJson(writeConfig(config));
 
     tacticTemplateRepository.save(template);

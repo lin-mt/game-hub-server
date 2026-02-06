@@ -120,48 +120,82 @@ public enum WarTactic {
         String task;
         switch (i) {
           case 0:
-            task = namesForRanks(accounts, new int[] {4}) + " 去乌巢，" + "官渡开放后：所有成员抢官渡";
+            {
+              List<String> parts = new ArrayList<>();
+              String wuchao = namesForRanks(accounts, new int[] {4});
+              if (!wuchao.isEmpty()) {
+                parts.add(wuchao + " 去乌巢");
+              }
+              parts.add("官渡开放后：所有成员抢官渡");
+              task = String.join("，", parts);
+            }
             break;
           case 1:
-            task =
-                namesForRanks(accounts, new int[] {5})
-                    + " 去乌巢，"
-                    + "官渡开放后："
-                    + namesForRanks(accounts, new int[] {2, 5, 10})
-                    + " 去霹雳车，"
-                    + namesForRanks(accounts, new int[] {17})
-                    + " 去黎阳，"
-                    + namesForRanks(accounts, new int[] {18})
-                    + " 去敖仓";
+            {
+              List<String> parts = new ArrayList<>();
+              String wuchao = namesForRanks(accounts, new int[] {5});
+              if (!wuchao.isEmpty()) {
+                parts.add(wuchao + " 去乌巢");
+              }
+              List<String> after = new ArrayList<>();
+              String pilei = namesForRanks(accounts, new int[] {2, 5, 10});
+              if (!pilei.isEmpty()) after.add(pilei + " 去霹雳车");
+              String liyang = namesForRanks(accounts, new int[] {17});
+              if (!liyang.isEmpty()) after.add(liyang + " 去黎阳");
+              String aocang = namesForRanks(accounts, new int[] {18});
+              if (!aocang.isEmpty()) after.add(aocang + " 去敖仓");
+              if (!after.isEmpty()) parts.add("官渡开放后：" + String.join("，", after));
+              task = parts.isEmpty() ? "官渡开放后：待分配" : String.join("，", parts);
+            }
             break;
           case 2:
-            task =
-                namesForRanks(accounts, new int[] {3})
-                    + " 去乌巢，"
-                    + "官渡开放后："
-                    + namesForRanks(accounts, new int[] {3, 11, 14})
-                    + " 去黎阳，"
-                    + namesForRanks(accounts, new int[] {25})
-                    + " 去敖仓";
+            {
+              List<String> parts = new ArrayList<>();
+              String wuchao = namesForRanks(accounts, new int[] {3});
+              if (!wuchao.isEmpty()) {
+                parts.add(wuchao + " 去乌巢");
+              }
+              List<String> after = new ArrayList<>();
+              String liyang = namesForRanks(accounts, new int[] {3, 11, 14});
+              if (!liyang.isEmpty()) after.add(liyang + " 去黎阳");
+              String aocang = namesForRanks(accounts, new int[] {25});
+              if (!aocang.isEmpty()) after.add(aocang + " 去敖仓");
+              if (!after.isEmpty()) parts.add("官渡开放后：" + String.join("，", after));
+              task = parts.isEmpty() ? "官渡开放后：待分配" : String.join("，", parts);
+            }
             break;
           case 3:
-            task =
-                "官渡开放后："
-                    + namesForRanks(accounts, new int[] {6, 12})
-                    + " 去敖仓，"
-                    + namesForRanks(accounts, new int[] {28})
-                    + " 去兵器坊";
+            {
+              List<String> after = new ArrayList<>();
+              String aocang = namesForRanks(accounts, new int[] {6, 12});
+              if (!aocang.isEmpty()) after.add(aocang + " 去敖仓");
+              String weapon = namesForRanks(accounts, new int[] {28});
+              if (!weapon.isEmpty()) after.add(weapon + " 去兵器坊");
+              task =
+                  after.isEmpty()
+                      ? "官渡开放后：待分配"
+                      : "官渡开放后：" + String.join("，", after);
+            }
             break;
           case 4:
-            task =
-                "官渡开放后："
-                    + namesForRanks(accounts, new int[] {7, 20})
-                    + " 去兵器坊，"
-                    + namesForRanks(accounts, new int[] {29})
-                    + " 去工匠坊";
+            {
+              List<String> after = new ArrayList<>();
+              String weapon = namesForRanks(accounts, new int[] {7, 20});
+              if (!weapon.isEmpty()) after.add(weapon + " 去兵器坊");
+              String craft = namesForRanks(accounts, new int[] {29});
+              if (!craft.isEmpty()) after.add(craft + " 去工匠坊");
+              task =
+                  after.isEmpty()
+                      ? "官渡开放后：待分配"
+                      : "官渡开放后：" + String.join("，", after);
+            }
             break;
           case 5:
-            task = "官渡开放后：" + namesForRanks(accounts, new int[] {9, 26}) + " 去工匠坊";
+            {
+              String craft = namesForRanks(accounts, new int[] {9, 26});
+              task =
+                  craft.isEmpty() ? "官渡开放后：待分配" : "官渡开放后：" + craft + " 去工匠坊";
+            }
             break;
           default:
             task = "官渡开放后：待分配";
@@ -276,34 +310,61 @@ public enum WarTactic {
             task = "官渡开放后：所有成员抢官渡";
             break;
           case 1:
-            task = "官渡开放后：" + namesForRanks(accounts, new int[] {2, 4, 10, 17, 18}) + " 抢霹雳车";
+            {
+              String pilei = namesForRanks(accounts, new int[] {2, 4, 10, 17, 18});
+              task =
+                  pilei.isEmpty()
+                      ? "官渡开放后：待分配"
+                      : "官渡开放后：" + pilei + " 抢霹雳车";
+            }
             break;
           case 2:
-            task =
-                "官渡开放后："
-                    + namesForRanks(accounts, new int[] {5, 11, 14})
-                    + " 抢黎阳，"
-                    + namesForRanks(accounts, new int[] {25})
-                    + " 抢敖仓";
+            {
+              List<String> after = new ArrayList<>();
+              String liyang = namesForRanks(accounts, new int[] {5, 11, 14});
+              if (!liyang.isEmpty()) after.add(liyang + " 抢黎阳");
+              String aocang = namesForRanks(accounts, new int[] {25});
+              if (!aocang.isEmpty()) after.add(aocang + " 抢敖仓");
+              task =
+                  after.isEmpty()
+                      ? "官渡开放后：待分配"
+                      : "官渡开放后：" + String.join("，", after);
+            }
             break;
           case 3:
-            task = "官渡开放后：" + namesForRanks(accounts, new int[] {6, 26}) + " 去工匠坊";
+            {
+              String craft = namesForRanks(accounts, new int[] {6, 26});
+              task =
+                  craft.isEmpty()
+                      ? "官渡开放后：待分配"
+                      : "官渡开放后：" + craft + " 去工匠坊";
+            }
             break;
           case 4:
-            task =
-                "官渡开放后："
-                    + namesForRanks(accounts, new int[] {7, 12})
-                    + " 抢敖仓，"
-                    + namesForRanks(accounts, new int[] {13})
-                    + " 去兵器坊";
+            {
+              List<String> after = new ArrayList<>();
+              String aocang = namesForRanks(accounts, new int[] {7, 12});
+              if (!aocang.isEmpty()) after.add(aocang + " 抢敖仓");
+              String weapon = namesForRanks(accounts, new int[] {13});
+              if (!weapon.isEmpty()) after.add(weapon + " 去兵器坊");
+              task =
+                  after.isEmpty()
+                      ? "官渡开放后：待分配"
+                      : "官渡开放后：" + String.join("，", after);
+            }
             break;
           case 5:
-            task =
-                "官渡开放后："
-                    + namesForRanks(accounts, new int[] {9, 28})
-                    + " 去兵器坊，"
-                    + namesForRanks(accounts, new int[] {29})
-                    + " 去工匠坊";
+            {
+              List<String> after = new ArrayList<>();
+              String weapon = namesForRanks(accounts, new int[] {9, 28});
+              if (!weapon.isEmpty()) after.add(weapon + " 去兵器坊");
+              String craft = namesForRanks(accounts, new int[] {29});
+              if (!craft.isEmpty()) after.add(craft + " 去工匠坊");
+              task =
+                  after.isEmpty()
+                      ? "官渡开放后：待分配"
+                      : "官渡开放后：" + String.join("，", after);
+            }
             break;
           default:
             task = "官渡开放后：待分配";
@@ -417,19 +478,16 @@ public enum WarTactic {
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < ranks.length; i++) {
       int rank = ranks[i];
-      String name;
       int idx = rank - 1;
       if (idx >= 0 && idx < accounts.size()) {
         GameAccount acc = accounts.get(idx);
-        name =
-            acc != null && acc.getAccountName() != null
-                ? acc.getAccountName()
-                : String.valueOf(rank);
-      } else {
-        name = String.valueOf(rank);
+        String name =
+            acc != null && acc.getAccountName() != null ? acc.getAccountName() : null;
+        if (name != null && !name.isEmpty()) {
+          if (sb.length() > 0) sb.append(",");
+          sb.append(name);
+        }
       }
-      sb.append(name);
-      if (i < ranks.length - 1) sb.append(",");
     }
     return sb.toString();
   }
