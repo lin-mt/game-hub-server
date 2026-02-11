@@ -66,24 +66,29 @@ public class GameAccountService {
       throw new BusinessException("用户不存在");
     }
 
-    // 检查用户在该区是否已有2个账号
-    long accountCount =
-        gameAccountRepository.countByUserIdAndServerId(userId, request.getServerId());
-    if (accountCount >= 2) {
-      throw new BusinessException("每个用户在每个区最多只能创建2个账号");
+    Integer accountServerId = request.getServerId();
+
+    // 如果提供了联盟ID，创建时直接对齐到联盟区号
+    Alliance alliance = null;
+    if (request.getAllianceId() != null) {
+      alliance =
+          allianceRepository
+              .findById(request.getAllianceId())
+              .orElseThrow(() -> new BusinessException("联盟不存在"));
+      accountServerId = alliance.getServerId();
     }
 
     // 检查是否已存在同名账号
     Optional<GameAccount> existingAccount =
         gameAccountRepository.findByAccountNameAndServerIdAndUserId(
-            request.getAccountName(), request.getServerId(), userId);
+            request.getAccountName(), accountServerId, userId);
     if (existingAccount.isPresent()) {
       throw new BusinessException("该区已存在同名账号");
     }
 
     GameAccount account = new GameAccount();
     account.setUserId(userId);
-    account.setServerId(request.getServerId());
+    account.setServerId(accountServerId);
     account.setAccountName(request.getAccountName());
     account.setPowerValue(request.getPowerValue());
     account.setDamageBonus(request.getDamageBonus());
@@ -98,13 +103,6 @@ public class GameAccountService {
 
     // 如果提供了联盟ID，则直接加入联盟
     if (request.getAllianceId() != null) {
-      // 验证联盟是否存在且在同一个区
-      Alliance alliance = allianceRepository.findById(request.getAllianceId())
-          .orElseThrow(() -> new BusinessException("联盟不存在"));
-      
-      if (!alliance.getServerId().equals(request.getServerId())) {
-        throw new BusinessException("只能加入同一个区的联盟");
-      }
 
       // 检查联盟中是否有同名的无主账号
       Optional<GameAccount> unownedAccount =

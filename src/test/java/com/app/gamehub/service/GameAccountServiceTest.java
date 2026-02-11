@@ -98,7 +98,6 @@ class GameAccountServiceTest {
             mockedUserContext.when(UserContext::getUserId).thenReturn(userId);
             
             when(userRepository.existsById(userId)).thenReturn(true);
-            when(gameAccountRepository.countByUserIdAndServerId(userId, 1)).thenReturn(0L);
             when(gameAccountRepository.save(any(GameAccount.class))).thenAnswer(invocation -> {
                 GameAccount account = invocation.getArgument(0);
                 account.setId(1L);
@@ -179,7 +178,6 @@ class GameAccountServiceTest {
             mockedUserContext.when(UserContext::getUserId).thenReturn(userId);
             
             when(userRepository.existsById(userId)).thenReturn(true);
-            when(gameAccountRepository.countByUserIdAndServerId(userId, 1)).thenReturn(0L);
             when(gameAccountRepository.save(any(GameAccount.class))).thenAnswer(invocation -> {
                 GameAccount account = invocation.getArgument(0);
                 account.setId(1L);

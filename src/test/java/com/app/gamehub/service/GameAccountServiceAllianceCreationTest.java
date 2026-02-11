@@ -74,7 +74,6 @@ class GameAccountServiceAllianceCreationTest {
       userContextMock.when(UserContext::getUserId).thenReturn(userId);
 
       when(userRepository.existsById(userId)).thenReturn(true);
-      when(gameAccountRepository.countByUserIdAndServerId(userId, 1)).thenReturn(0L);
       when(gameAccountRepository.findByAccountNameAndServerIdAndUserId("TestAccount", 1, userId))
           .thenReturn(Optional.empty());
       when(allianceRepository.findById(100L)).thenReturn(Optional.of(alliance));
@@ -108,7 +107,6 @@ class GameAccountServiceAllianceCreationTest {
       userContextMock.when(UserContext::getUserId).thenReturn(userId);
 
       when(userRepository.existsById(userId)).thenReturn(true);
-      when(gameAccountRepository.countByUserIdAndServerId(userId, 1)).thenReturn(0L);
       when(gameAccountRepository.findByAccountNameAndServerIdAndUserId("TestAccount", 1, userId))
           .thenReturn(Optional.empty());
       when(allianceRepository.findById(100L)).thenReturn(Optional.of(alliance));
@@ -156,9 +154,6 @@ class GameAccountServiceAllianceCreationTest {
       userContextMock.when(UserContext::getUserId).thenReturn(userId);
 
       when(userRepository.existsById(userId)).thenReturn(true);
-      when(gameAccountRepository.countByUserIdAndServerId(userId, 1)).thenReturn(0L);
-      when(gameAccountRepository.findByAccountNameAndServerIdAndUserId("TestAccount", 1, userId))
-          .thenReturn(Optional.empty());
       when(allianceRepository.findById(100L)).thenReturn(Optional.empty());
 
       // Act & Assert
@@ -170,7 +165,7 @@ class GameAccountServiceAllianceCreationTest {
   }
 
   @Test
-  void testCreateAccountWithAllianceId_DifferentServer() {
+  void testCreateAccountWithAllianceId_DifferentServer_ShouldAutoAlignServer() {
     try (MockedStatic<UserContext> userContextMock = mockStatic(UserContext.class)) {
       // Arrange
       Long userId = 1L;
@@ -179,16 +174,29 @@ class GameAccountServiceAllianceCreationTest {
       alliance.setServerId(2); // 不同的区号
 
       when(userRepository.existsById(userId)).thenReturn(true);
-      when(gameAccountRepository.countByUserIdAndServerId(userId, 1)).thenReturn(0L);
-      when(gameAccountRepository.findByAccountNameAndServerIdAndUserId("TestAccount", 1, userId))
+      when(gameAccountRepository.findByAccountNameAndServerIdAndUserId("TestAccount", 2, userId))
           .thenReturn(Optional.empty());
       when(allianceRepository.findById(100L)).thenReturn(Optional.of(alliance));
+      when(gameAccountRepository.findByAllianceIdAndAccountName(100L, "TestAccount"))
+          .thenReturn(Optional.empty());
 
-      // Act & Assert
-      BusinessException exception = assertThrows(BusinessException.class, () -> {
-        gameAccountService.createGameAccount(request);
-      });
-      assertEquals("只能加入同一个区的联盟", exception.getMessage());
+      GameAccount savedAccount = new GameAccount();
+      savedAccount.setId(1L);
+      savedAccount.setUserId(userId);
+      savedAccount.setAllianceId(100L);
+      savedAccount.setServerId(2);
+      when(gameAccountRepository.save(any(GameAccount.class))).thenReturn(savedAccount);
+
+      // Act
+      GameAccount result = gameAccountService.createGameAccount(request);
+
+      // Assert
+      assertNotNull(result);
+      assertEquals(2, result.getServerId());
+      verify(gameAccountRepository).save(argThat(account ->
+          account.getServerId().equals(2) &&
+          account.getAllianceId().equals(100L)
+      ));
     }
   }
 
@@ -201,7 +209,6 @@ class GameAccountServiceAllianceCreationTest {
       request.setAllianceId(null); // 不提供联盟ID
 
       when(userRepository.existsById(userId)).thenReturn(true);
-      when(gameAccountRepository.countByUserIdAndServerId(userId, 1)).thenReturn(0L);
       when(gameAccountRepository.findByAccountNameAndServerIdAndUserId("TestAccount", 1, userId))
           .thenReturn(Optional.empty());
 
@@ -224,20 +231,27 @@ class GameAccountServiceAllianceCreationTest {
   }
 
   @Test
-  void testCreateAccount_ExceedAccountLimit() {
+  void testCreateAccount_NoAccountLimit() {
     try (MockedStatic<UserContext> userContextMock = mockStatic(UserContext.class)) {
       // Arrange
       Long userId = 1L;
       userContextMock.when(UserContext::getUserId).thenReturn(userId);
+      request.setAllianceId(null);
 
       when(userRepository.existsById(userId)).thenReturn(true);
-      when(gameAccountRepository.countByUserIdAndServerId(userId, 1)).thenReturn(2L); // 已有2个账号
+      when(gameAccountRepository.findByAccountNameAndServerIdAndUserId("TestAccount", 1, userId))
+          .thenReturn(Optional.empty());
+      GameAccount savedAccount = new GameAccount();
+      savedAccount.setId(1L);
+      savedAccount.setUserId(userId);
+      when(gameAccountRepository.save(any(GameAccount.class))).thenReturn(savedAccount);
 
-      // Act & Assert
-      BusinessException exception = assertThrows(BusinessException.class, () -> {
-        gameAccountService.createGameAccount(request);
-      });
-      assertEquals("每个用户在每个区最多只能创建2个账号", exception.getMessage());
+      // Act
+      GameAccount result = gameAccountService.createGameAccount(request);
+
+      // Assert
+      assertNotNull(result);
+      verify(gameAccountRepository).save(any(GameAccount.class));
     }
   }
 
@@ -247,6 +261,7 @@ class GameAccountServiceAllianceCreationTest {
       // Arrange
       Long userId = 1L;
       userContextMock.when(UserContext::getUserId).thenReturn(userId);
+      request.setAllianceId(null);
 
       GameAccount existingAccount = new GameAccount();
       existingAccount.setId(1L);
@@ -254,7 +269,6 @@ class GameAccountServiceAllianceCreationTest {
       existingAccount.setAccountName("TestAccount");
 
       when(userRepository.existsById(userId)).thenReturn(true);
-      when(gameAccountRepository.countByUserIdAndServerId(userId, 1)).thenReturn(0L);
       when(gameAccountRepository.findByAccountNameAndServerIdAndUserId("TestAccount", 1, userId))
           .thenReturn(Optional.of(existingAccount));
 

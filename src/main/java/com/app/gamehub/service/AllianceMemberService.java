@@ -103,11 +103,6 @@ public class AllianceMemberService {
       throw new BusinessException("账号已加入联盟，请先退出当前联盟");
     }
 
-    // 验证账号和联盟是否在同一个区
-    if (!account.getServerId().equals(alliance.getServerId())) {
-      throw new BusinessException("只能申请加入同一个区的联盟");
-    }
-
     // 检查是否已有待处理的申请
     if (applicationRepository.existsByAccountIdAndStatus(
         accountId, AllianceApplication.ApplicationStatus.PENDING)) {
@@ -121,6 +116,7 @@ public class AllianceMemberService {
 
     if (unownedAccount.isPresent() && unownedAccount.get().getUserId() == null) {
       // 找到同名的无主账号，将其信息合并到用户账号中
+      account.setServerId(alliance.getServerId());
       mergeUnownedAccountToUserAccount(account, unownedAccount.get());
       log.info("用户 {} 通过同名无主账号直接加入联盟 {}", UserContext.getUserId(), alliance.getId());
       return null;
@@ -142,6 +138,7 @@ public class AllianceMemberService {
       application.setProcessedBy(alliance.getLeaderId()); // 系统自动处理，记录为盟主处理
 
       // 直接加入联盟
+      account.setServerId(alliance.getServerId());
       account.setAllianceId(alliance.getId());
       account.setMemberTier(GameAccount.MemberTier.TIER_1); // 默认为一阶成员
       gameAccountRepository.save(account);
@@ -189,10 +186,12 @@ public class AllianceMemberService {
 
       if (unownedAccount.isPresent() && unownedAccount.get().getUserId() == null) {
         // 找到同名的无主账号，将其信息合并到用户账号中
+        account.setServerId(alliance.getServerId());
         mergeUnownedAccountToUserAccount(account, unownedAccount.get());
         log.info("用户 {} 通过同名无主账号加入联盟 {}", account.getUserId(), alliance.getId());
       } else {
         // 正常加入联盟流程
+        account.setServerId(alliance.getServerId());
         account.setAllianceId(alliance.getId());
         account.setMemberTier(GameAccount.MemberTier.TIER_1); // 默认为一阶成员
         gameAccountRepository.save(account);
@@ -718,6 +717,9 @@ public class AllianceMemberService {
     }
 
     // 设置联盟信息
+    if (unownedAccount.getServerId() != null) {
+      userAccount.setServerId(unownedAccount.getServerId());
+    }
     userAccount.setAllianceId(unownedAccount.getAllianceId());
 
     // 2. 转移所有关联记录
