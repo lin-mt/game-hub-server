@@ -545,8 +545,14 @@ public class WarService {
         warApplicationRepository.findByAllianceIdAndWarTypeAndStatusOrderByCreatedAtAsc(
             allianceId, warType, WarApplication.ApplicationStatus.APPROVED);
 
-    List<Long> accountIds =
-        applicants.stream().map(WarApplication::getAccountId).collect(Collectors.toList());
+    Map<Long, WarApplication> applicantByAccountId = new LinkedHashMap<>();
+    for (WarApplication app : applicants) {
+      if (app.getAccountId() != null) {
+        applicantByAccountId.putIfAbsent(app.getAccountId(), app);
+      }
+    }
+
+    List<Long> accountIds = new ArrayList<>(applicantByAccountId.keySet());
 
     // Also fetch applications by accountIds (some tests expect this repository call)
     if (!accountIds.isEmpty()) {
@@ -557,34 +563,43 @@ public class WarService {
     // 获取账号信息
     List<GameAccount> accounts = gameAccountRepository.findAllById(accountIds);
 
-    // Apply requested sorting mode to accounts (default is highest damage bonus)
+    // 先按“主力优先、替补后置”，再按所选排序方式安排战术
+    Comparator<GameAccount> metricComparator;
     if (TacticSortMode.FOUR_STATS.equals(request.getSortMode())) {
-      // sort by sum of four stats: infantryHp + infantryDefense + archerAttack + archerSiege (nulls
-      // treated as 0)
-      accounts.sort(
-          (GameAccount a, GameAccount b) -> {
-            long sa = 0L;
-            if (a.getInfantryHp() != null) sa += a.getInfantryHp();
-            if (a.getInfantryDefense() != null) sa += a.getInfantryDefense();
-            if (a.getArcherAttack() != null) sa += a.getArcherAttack();
-            if (a.getArcherSiege() != null) sa += a.getArcherSiege();
-            long sb = 0L;
-            if (b.getInfantryHp() != null) sb += b.getInfantryHp();
-            if (b.getInfantryDefense() != null) sb += b.getInfantryDefense();
-            if (b.getArcherAttack() != null) sb += b.getArcherAttack();
-            if (b.getArcherSiege() != null) sb += b.getArcherSiege();
-            return Long.compare(sb, sa); // descending order
-          });
+      metricComparator =
+          Comparator.comparingLong(this::sumFourStats)
+              .reversed()
+              .thenComparing(
+                  Comparator.comparing(
+                      GameAccount::getPowerValue, Comparator.nullsLast(Comparator.reverseOrder())));
     } else {
-      // default: highest damage bonus (existing behavior for non-官渡 wars is handled inside
-      // WarTactic.arrangement)
-      // But for 官渡 we must ensure a deterministic ordering: use damageBonus descending with nulls
-      // last
-      accounts.sort(
+      metricComparator =
           Comparator.comparing(
-                  GameAccount::getDamageBonus, Comparator.nullsLast(Comparator.naturalOrder()))
-              .reversed());
+                  GameAccount::getDamageBonus, Comparator.nullsLast(Comparator.reverseOrder()))
+              .thenComparing(
+                  Comparator.comparing(
+                      GameAccount::getPowerValue, Comparator.nullsLast(Comparator.reverseOrder())));
     }
+
+    Comparator<GameAccount> applicantTimeComparator =
+        Comparator.comparing(
+            (GameAccount acc) -> {
+              WarApplication app = applicantByAccountId.get(acc.getId());
+              return app == null ? null : app.getCreatedAt();
+            },
+            Comparator.nullsLast(Comparator.naturalOrder()));
+
+    accounts.sort(
+        Comparator.comparing(
+                (GameAccount acc) -> {
+                  WarApplication app = applicantByAccountId.get(acc.getId());
+                  return app != null && Boolean.TRUE.equals(app.getIsSubstitute());
+                })
+            .thenComparing(metricComparator)
+            .thenComparing(applicantTimeComparator));
+
+    // 战术分组最多30人，超出人员保留为机动人员
+    List<GameAccount> tacticalAccounts = new ArrayList<>(accounts.subList(0, Math.min(30, accounts.size())));
 
     // If we previously loaded DB template, fill it using actual accounts; otherwise fallback to
     // enum
@@ -603,9 +618,9 @@ public class WarService {
             WarGroup wg = new WarGroup();
             // resolve rank placeholders in name and task now that we have accounts
             String resolvedName =
-                TacticTemplateUtils.replaceRankPlaceholders(g.getName(), accounts);
+                TacticTemplateUtils.replaceRankPlaceholders(g.getName(), tacticalAccounts);
             String resolvedTask =
-                TacticTemplateUtils.replaceRankPlaceholders(g.getTask(), accounts);
+                TacticTemplateUtils.replaceRankPlaceholders(g.getTask(), tacticalAccounts);
             wg.setGroupName(resolvedName);
             wg.setGroupTask(resolvedTask);
             ta.setWarGroup(wg);
@@ -613,8 +628,8 @@ public class WarService {
             List<Integer> ranks = RankExpressionParser.parse(g.getRanks());
             for (int rank : ranks) {
               int idx = rank - 1;
-              if (idx >= 0 && idx < accounts.size()) {
-                GameAccount acc = accounts.get(idx);
+              if (idx >= 0 && idx < tacticalAccounts.size()) {
+                GameAccount acc = tacticalAccounts.get(idx);
                 WarArrangement wa = new WarArrangement();
                 wa.setAccountId(acc.getId());
                 wa.setAccount(acc);
@@ -625,26 +640,21 @@ public class WarService {
           }
 
           // fill remaining accounts not assigned
-          boolean[] assigned = new boolean[accounts.size()];
+          Set<Long> assignedAccountIds = new HashSet<>();
           for (TacticalArrangement a : newArrs) {
             for (WarArrangement wa : a.getWarArrangements()) {
-              if (wa.getAccount() != null && wa.getAccount().getId() != null) {
-                long id = wa.getAccount().getId();
-                if (id >= 1 && id <= accounts.size()) assigned[(int) id - 1] = true;
-              }
+              if (wa.getAccountId() != null) assignedAccountIds.add(wa.getAccountId());
             }
           }
           int groupCount = newArrs.size() == 0 ? 1 : newArrs.size();
           int nextGroup = 0;
-          for (int i = 0; i < accounts.size(); i++) {
-            if (!assigned[i]) {
-              GameAccount acc = accounts.get(i);
-              WarArrangement wa = new WarArrangement();
-              wa.setAccountId(acc.getId());
-              wa.setAccount(acc);
-              newArrs.get(nextGroup % groupCount).getWarArrangements().add(wa);
-              nextGroup++;
-            }
+          for (GameAccount acc : tacticalAccounts) {
+            if (acc.getId() == null || assignedAccountIds.contains(acc.getId())) continue;
+            WarArrangement wa = new WarArrangement();
+            wa.setAccountId(acc.getId());
+            wa.setAccount(acc);
+            newArrs.get(nextGroup % groupCount).getWarArrangements().add(wa);
+            nextGroup++;
           }
           arrangement = newArrs;
         } catch (Exception ex) {
@@ -664,9 +674,10 @@ public class WarService {
       if (!tacticEnum.getSupportedWarTypes().contains(warType)) {
         throw new BusinessException("该战术不支持当前战事类型");
       }
-      arrangement = tacticEnum.arrangement(accounts);
+      arrangement = tacticEnum.arrangement(tacticalAccounts);
     }
 
+    Set<Long> groupedAccountIds = new HashSet<>();
     arrangement.forEach(
         tacticalArrangement -> {
           List<WarArrangement> tacticalArrangements = tacticalArrangement.getWarArrangements();
@@ -682,9 +693,91 @@ public class WarService {
                 warArrangement.setWarType(warType);
                 warArrangement.setAllianceId(allianceId);
                 warArrangement.setWarGroupId(warGroup.getId());
+                WarApplication app = applicantByAccountId.get(warArrangement.getAccountId());
+                warArrangement.setIsSubstitute(
+                    app != null && Boolean.TRUE.equals(app.getIsSubstitute()));
+                groupedAccountIds.add(warArrangement.getAccountId());
               });
           warArrangementRepository.saveAll(tacticalArrangements);
         });
+
+    // 未进入分组的成员保留为机动人员（含超过30人的替补）
+    List<WarArrangement> mobileArrangements =
+        accounts.stream()
+            .filter(acc -> acc.getId() != null && !groupedAccountIds.contains(acc.getId()))
+            .map(
+                acc -> {
+                  WarArrangement wa = new WarArrangement();
+                  wa.setAccountId(acc.getId());
+                  wa.setAllianceId(allianceId);
+                  wa.setWarType(warType);
+                  wa.setWarGroupId(null);
+                  WarApplication app = applicantByAccountId.get(acc.getId());
+                  wa.setIsSubstitute(app != null && Boolean.TRUE.equals(app.getIsSubstitute()));
+                  return wa;
+                })
+            .collect(Collectors.toList());
+    if (!mobileArrangements.isEmpty()) {
+      warArrangementRepository.saveAll(mobileArrangements);
+    }
+  }
+
+  private long sumFourStats(GameAccount account) {
+    if (account == null) return 0L;
+    long sum = 0L;
+    if (account.getInfantryHp() != null) sum += account.getInfantryHp();
+    if (account.getInfantryDefense() != null) sum += account.getInfantryDefense();
+    if (account.getArcherAttack() != null) sum += account.getArcherAttack();
+    if (account.getArcherSiege() != null) sum += account.getArcherSiege();
+    return sum;
+  }
+
+  @Transactional
+  public WarArrangement updateWarMemberSubstitute(
+      Long accountId, WarType warType, Boolean isSubstitute) {
+    GameAccount account =
+        gameAccountRepository.findById(accountId).orElseThrow(() -> new BusinessException("账号不存在"));
+    if (account.getAllianceId() == null) {
+      throw new BusinessException("账号未加入联盟");
+    }
+    Alliance alliance =
+        allianceRepository
+            .findById(account.getAllianceId())
+            .orElseThrow(() -> new BusinessException("联盟不存在"));
+    if (!Objects.equals(UserContext.getUserId(), alliance.getLeaderId())) {
+      throw new BusinessException("只有盟主可以修改成员身份");
+    }
+
+    List<WarArrangement> arrangements =
+        warArrangementRepository.findByAccountIdAndWarTypeIn(accountId, List.of(warType));
+    if (arrangements.isEmpty()) {
+      throw new BusinessException("该成员不在当前战事中");
+    }
+
+    WarArrangement arrangement = arrangements.getFirst();
+    boolean targetIsSubstitute = Boolean.TRUE.equals(isSubstitute);
+    boolean currentIsSubstitute = Boolean.TRUE.equals(arrangement.getIsSubstitute());
+    if (currentIsSubstitute == targetIsSubstitute) {
+      return arrangement;
+    }
+
+    if (warType == WarType.GUANDU_ONE || warType == WarType.GUANDU_TWO) {
+      checkWarLimit(alliance, warType, targetIsSubstitute);
+    }
+
+    arrangement.setIsSubstitute(targetIsSubstitute);
+    WarArrangement savedArrangement = warArrangementRepository.save(arrangement);
+
+    List<WarApplication> applications =
+        warApplicationRepository.findByAccountIdAndWarTypeIn(accountId, List.of(warType));
+    for (WarApplication application : applications) {
+      if (application.getStatus() == WarApplication.ApplicationStatus.APPROVED) {
+        application.setIsSubstitute(targetIsSubstitute);
+        warApplicationRepository.save(application);
+      }
+    }
+
+    return savedArrangement;
   }
 
   public void exportWarPersonnel(Long allianceId, HttpServletResponse response) throws IOException {

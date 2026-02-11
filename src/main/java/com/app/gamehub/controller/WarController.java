@@ -77,6 +77,17 @@ public class WarController {
     return ApiResponse.success("移除成功", null);
   }
 
+  @PostMapping("/toggle-substitute/{accountId}")
+  @Operation(summary = "修改战事成员身份（正式/替补）")
+  public ApiResponse<WarArrangement> toggleWarMemberSubstitute(
+      @Parameter(description = "账号ID", example = "1") @PathVariable Long accountId,
+      @Parameter(description = "战事类型") @RequestParam WarType warType,
+      @Parameter(description = "是否替补") @RequestParam Boolean isSubstitute) {
+    WarArrangement arrangement =
+        warService.updateWarMemberSubstitute(accountId, warType, isSubstitute);
+    return ApiResponse.success("成员身份修改成功", arrangement);
+  }
+
   @GetMapping("/alliances/{allianceId}/applications")
   @Operation(summary = "获取联盟战事申请列表")
   public ApiResponse<List<WarApplication>> getPendingWarApplications(
