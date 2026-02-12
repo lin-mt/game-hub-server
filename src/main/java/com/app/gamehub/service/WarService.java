@@ -404,9 +404,13 @@ public class WarService {
     return warArrangement;
   }
 
+  @Transactional
   public WarArrangement addToWar(Long accountId, WarType warType, Boolean isSubstitute) {
     GameAccount account =
         gameAccountRepository.findById(accountId).orElseThrow(() -> new BusinessException("账号不存在"));
+    if (account.getAllianceId() == null) {
+      throw new BusinessException("账号未加入联盟");
+    }
     Alliance alliance =
         allianceRepository
             .findById(account.getAllianceId())
@@ -414,6 +418,9 @@ public class WarService {
     if (!UserContext.getUserId().equals(alliance.getLeaderId())) {
       throw new BusinessException("只有盟主才能添加成员到战事中");
     }
+
+    boolean targetIsSubstitute = Boolean.TRUE.equals(isSubstitute);
+
     if (warType == WarType.GUANDU_ONE || warType == WarType.GUANDU_TWO) {
       List<WarArrangement> arrangements =
           warArrangementRepository.findByAccountIdAndWarTypeIn(
@@ -426,12 +433,39 @@ public class WarService {
           throw new BusinessException("当前成员不能同时参加官渡一和官渡二");
         }
       }
+
+      ReentrantLock lock = getWarApplicationLock(alliance.getId(), warType, targetIsSubstitute);
+      lock.lock();
+      try {
+        // 盟主手动添加同样必须遵守官渡主力/替补人数上限
+        checkWarLimit(alliance, warType, targetIsSubstitute);
+
+        WarApplication warApplication = new WarApplication();
+        warApplication.setAccountId(accountId);
+        warApplication.setAllianceId(alliance.getId());
+        warApplication.setWarType(warType);
+        warApplication.setIsSubstitute(targetIsSubstitute);
+        warApplication.setStatus(WarApplication.ApplicationStatus.APPROVED);
+        warApplication.setProcessedBy(UserContext.getUserId());
+        warApplicationRepository.save(warApplication);
+
+        WarArrangement arrangement = new WarArrangement();
+        arrangement.setAccountId(accountId);
+        arrangement.setAllianceId(alliance.getId());
+        arrangement.setWarType(warType);
+        arrangement.setIsSubstitute(targetIsSubstitute);
+        warArrangementRepository.save(arrangement);
+        return arrangement;
+      } finally {
+        lock.unlock();
+      }
     }
+
     WarApplication warApplication = new WarApplication();
     warApplication.setAccountId(accountId);
     warApplication.setAllianceId(alliance.getId());
     warApplication.setWarType(warType);
-    warApplication.setIsSubstitute(isSubstitute);
+    warApplication.setIsSubstitute(targetIsSubstitute);
     warApplication.setStatus(WarApplication.ApplicationStatus.APPROVED);
     warApplication.setProcessedBy(UserContext.getUserId());
     warApplicationRepository.save(warApplication);
@@ -439,7 +473,7 @@ public class WarService {
     arrangement.setAccountId(accountId);
     arrangement.setAllianceId(alliance.getId());
     arrangement.setWarType(warType);
-    arrangement.setIsSubstitute(isSubstitute);
+    arrangement.setIsSubstitute(targetIsSubstitute);
     warArrangementRepository.save(arrangement);
     return arrangement;
   }

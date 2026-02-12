@@ -272,6 +272,25 @@ public class AllianceMemberService {
     return applicationRepository.findByAccountIdOrderByCreatedAtDesc(accountId);
   }
 
+  @Transactional
+  public void clearAllianceMembers(Long allianceId) {
+    Long userId = UserContext.getUserId();
+    Alliance alliance =
+        allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
+
+    if (!alliance.getLeaderId().equals(userId)) {
+      throw new BusinessException("只有盟主可以清空联盟成员");
+    }
+
+    List<GameAccount> accounts = gameAccountRepository.findByAllianceId(allianceId);
+    if (accounts.isEmpty()) {
+      return;
+    }
+
+    List<Long> accountIds = accounts.stream().map(GameAccount::getId).collect(Collectors.toList());
+    removeMembersFromAllianceBatch(accountIds);
+  }
+
   // Changed return type to DTO list and map GameAccount -> DTO
   public List<AllianceMemberSummaryDto> getAllianceMembers(Long allianceId) {
     // 验证联盟是否存在

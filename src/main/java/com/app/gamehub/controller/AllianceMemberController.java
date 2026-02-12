@@ -81,6 +81,14 @@ public class AllianceMemberController {
     return ApiResponse.success(members);
   }
 
+  @DeleteMapping("/alliances/{allianceId}/members")
+  @Operation(summary = "清空联盟成员")
+  public ApiResponse<Void> clearAllianceMembers(
+      @Parameter(description = "联盟ID", example = "1") @PathVariable Long allianceId) {
+    allianceMemberService.clearAllianceMembers(allianceId);
+    return ApiResponse.success("联盟成员已清空", null);
+  }
+
   @PostMapping("/alliances/{allianceId}/bulk-update-from-text")
   @Operation(summary = "从文本批量更新联盟成员信息（阶级和战力）")
   public ApiResponse<String> bulkUpdateFromText(
