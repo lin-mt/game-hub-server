@@ -100,6 +100,7 @@ public class GameAccountService {
     account.setArcherAttack(request.getArcherAttack());
     account.setArcherSiege(request.getArcherSiege());
     account.setLvbuStarLevel(request.getLvbuStarLevel());
+    account.setAllianceFormalMember(false);
 
     // 如果提供了联盟ID，则直接加入联盟
     if (request.getAllianceId() != null) {
@@ -148,6 +149,9 @@ public class GameAccountService {
         if (unowned.getMemberTier() != null) {
           account.setMemberTier(unowned.getMemberTier());
         }
+        if (unowned.getAllianceFormalMember() != null) {
+          account.setAllianceFormalMember(unowned.getAllianceFormalMember());
+        }
         if (unowned.getBarbarianGroupId() != null) {
           account.setBarbarianGroupId(unowned.getBarbarianGroupId());
         }
@@ -193,6 +197,7 @@ public class GameAccountService {
         // 没有同名无主账号，直接加入联盟
         account.setAllianceId(alliance.getId());
         account.setMemberTier(GameAccount.MemberTier.TIER_1); // 默认为一阶成员
+        account.setAllianceFormalMember(false);
         log.info("用户 {} 创建账号并直接加入联盟 {}", userId, alliance.getId());
       }
     }
@@ -344,6 +349,7 @@ public class GameAccountService {
       log.info("清空账号的联盟和王朝关联");
       account.setAllianceId(null);
       account.setMemberTier(null);
+      account.setAllianceFormalMember(null);
       account.setDynastyId(null);
       gameAccountRepository.save(account);
       gameAccountRepository.flush();
@@ -530,6 +536,9 @@ public class GameAccountService {
     }
     if (unownedAccount.getMemberTier() != null) {
       userAccount.setMemberTier(unownedAccount.getMemberTier());
+    }
+    if (unownedAccount.getAllianceFormalMember() != null) {
+      userAccount.setAllianceFormalMember(unownedAccount.getAllianceFormalMember());
     }
     if (unownedAccount.getBarbarianGroupId() != null) {
       userAccount.setBarbarianGroupId(unownedAccount.getBarbarianGroupId());

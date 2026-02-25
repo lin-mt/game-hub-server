@@ -71,6 +71,9 @@ public class GameAccount extends BaseEntity {
   @Enumerated(EnumType.STRING)
   private MemberTier memberTier;
 
+  @Column(name = "alliance_formal_member")
+  private Boolean allianceFormalMember;
+
   @ElementCollection(targetClass = ActivityType.class)
   @CollectionTable(
       name = "game_account_notification_types",

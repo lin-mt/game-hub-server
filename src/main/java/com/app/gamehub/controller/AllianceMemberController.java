@@ -3,6 +3,7 @@ package com.app.gamehub.controller;
 import com.app.gamehub.dto.ApiResponse;
 import com.app.gamehub.dto.AllianceMemberSummaryDto;
 import com.app.gamehub.dto.BulkUpdateMembersFromTextRequest;
+import com.app.gamehub.dto.ClaimFormalMemberRequest;
 import com.app.gamehub.dto.JoinAllianceRequest;
 import com.app.gamehub.dto.ProcessApplicationRequest;
 import com.app.gamehub.entity.AllianceApplication;
@@ -53,6 +54,16 @@ public class AllianceMemberController {
       @Parameter(description = "账号ID", example = "1") @PathVariable Long accountId) {
     allianceMemberService.removeMember(accountId);
     return ApiResponse.success("成员移除成功", null);
+  }
+
+  @PostMapping("/accounts/{accountId}/claim-formal-member")
+  @Operation(summary = "认领联盟正式成员账号")
+  public ApiResponse<GameAccount> claimFormalMember(
+      @Parameter(description = "目标账号ID", example = "1") @PathVariable Long accountId,
+      @Valid @RequestBody ClaimFormalMemberRequest request) {
+    GameAccount account =
+        allianceMemberService.claimFormalMember(accountId, request.getSourceAccountId());
+    return ApiResponse.success("认领正式成员成功", account);
   }
 
   @GetMapping("/alliances/{allianceId}/applications")

@@ -16,4 +16,7 @@ public class JoinAllianceRequest {
   @NotBlank(message = "联盟编码不能为空")
   @Schema(description = "联盟编码")
   private String allianceCode;
+
+  @Schema(description = "认领的联盟正式成员账号ID（可选）")
+  private Long formalMemberAccountId;
 }

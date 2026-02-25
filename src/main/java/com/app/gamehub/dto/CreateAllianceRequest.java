@@ -52,4 +52,7 @@ public class CreateAllianceRequest {
 
   @Schema(description = "腾讯会议密码")
   private String tencentMeetingPassword;
+
+  @Schema(description = "联盟马车时间")
+  private String carriageTime;
 }

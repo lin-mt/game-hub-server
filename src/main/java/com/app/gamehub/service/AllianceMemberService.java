@@ -95,12 +95,22 @@ public class AllianceMemberService {
             .findByCode(request.getAllianceCode().toUpperCase())
             .orElseThrow(() -> new BusinessException("联盟不存在"));
 
+    Long formalMemberAccountId = request.getFormalMemberAccountId();
+
     // 验证账号是否已加入联盟
     if (account.getAllianceId() != null) {
       if (account.getAllianceId().equals(alliance.getId())) {
+        if (formalMemberAccountId != null) {
+          claimFormalMemberForAccount(account, alliance, formalMemberAccountId);
+        }
         return null;
       }
       throw new BusinessException("账号已加入联盟，请先退出当前联盟");
+    }
+
+    if (formalMemberAccountId != null) {
+      claimFormalMemberForAccount(account, alliance, formalMemberAccountId);
+      return null;
     }
 
     // 检查是否已有待处理的申请
@@ -117,7 +127,9 @@ public class AllianceMemberService {
     if (unownedAccount.isPresent() && unownedAccount.get().getUserId() == null) {
       // 找到同名的无主账号，将其信息合并到用户账号中
       account.setServerId(alliance.getServerId());
-      mergeUnownedAccountToUserAccount(account, unownedAccount.get());
+      GameAccount merged = mergeUnownedAccountToUserAccount(account, unownedAccount.get());
+      merged.setAllianceFormalMember(Boolean.TRUE.equals(merged.getAllianceFormalMember()));
+      gameAccountRepository.save(merged);
       log.info("用户 {} 通过同名无主账号直接加入联盟 {}", UserContext.getUserId(), alliance.getId());
       return null;
     }
@@ -141,6 +153,7 @@ public class AllianceMemberService {
       account.setServerId(alliance.getServerId());
       account.setAllianceId(alliance.getId());
       account.setMemberTier(GameAccount.MemberTier.TIER_1); // 默认为一阶成员
+      account.setAllianceFormalMember(false);
       gameAccountRepository.save(account);
 
       log.info("账号 {} 自动加入联盟 {}（无需审核）", accountId, alliance.getId());
@@ -187,13 +200,16 @@ public class AllianceMemberService {
       if (unownedAccount.isPresent() && unownedAccount.get().getUserId() == null) {
         // 找到同名的无主账号，将其信息合并到用户账号中
         account.setServerId(alliance.getServerId());
-        mergeUnownedAccountToUserAccount(account, unownedAccount.get());
+        GameAccount merged = mergeUnownedAccountToUserAccount(account, unownedAccount.get());
+        merged.setAllianceFormalMember(Boolean.TRUE.equals(merged.getAllianceFormalMember()));
+        gameAccountRepository.save(merged);
         log.info("用户 {} 通过同名无主账号加入联盟 {}", account.getUserId(), alliance.getId());
       } else {
         // 正常加入联盟流程
         account.setServerId(alliance.getServerId());
         account.setAllianceId(alliance.getId());
         account.setMemberTier(GameAccount.MemberTier.TIER_1); // 默认为一阶成员
+        account.setAllianceFormalMember(false);
         gameAccountRepository.save(account);
       }
 
@@ -248,10 +264,62 @@ public class AllianceMemberService {
     // 移除成员
     account.setAllianceId(null);
     account.setMemberTier(null);
+    account.setAllianceFormalMember(null);
     applicationRepository.deleteAllByAccountId(accountId);
     warApplicationRepository.deleteAllByAccountId(accountId);
     warArrangementRepository.deleteAllByAccountId(accountId);
     gameAccountRepository.save(account);
+  }
+
+  @Transactional
+  public GameAccount claimFormalMember(Long accountId, Long sourceAccountId) {
+    Long userId = UserContext.getUserId();
+    GameAccount account =
+        gameAccountRepository
+            .findById(accountId)
+            .orElseThrow(() -> new BusinessException("游戏账号不存在"));
+    if (account.getUserId() == null || !account.getUserId().equals(userId)) {
+      throw new BusinessException("只能为自己的账号认领正式成员");
+    }
+    Alliance alliance =
+        allianceRepository
+            .findById(account.getAllianceId())
+            .orElseThrow(() -> new BusinessException("联盟不存在"));
+    return claimFormalMemberForAccount(account, alliance, sourceAccountId);
+  }
+
+  @Transactional
+  protected GameAccount claimFormalMemberForAccount(
+      GameAccount account, Alliance alliance, Long sourceAccountId) {
+    if (sourceAccountId == null) {
+      throw new BusinessException("请选择联盟正式成员账号");
+    }
+    GameAccount source =
+        gameAccountRepository
+            .findById(sourceAccountId)
+            .orElseThrow(() -> new BusinessException("联盟正式成员账号不存在"));
+    if (source.getUserId() != null) {
+      throw new BusinessException("只能选择未认领的联盟正式成员账号");
+    }
+    if (!alliance.getId().equals(source.getAllianceId())) {
+      throw new BusinessException("所选账号不在当前联盟");
+    }
+    if (!Boolean.TRUE.equals(source.getAllianceFormalMember())) {
+      throw new BusinessException("所选账号不是联盟正式成员");
+    }
+    account.setServerId(alliance.getServerId());
+    account.setAllianceId(alliance.getId());
+    String sourceName = source.getAccountName();
+    GameAccount merged = mergeUnownedAccountToUserAccount(account, source);
+    merged.setAccountName(sourceName);
+    merged.setAllianceFormalMember(true);
+    if (merged.getAllianceId() == null) {
+      merged.setAllianceId(alliance.getId());
+    }
+    if (merged.getMemberTier() == null) {
+      merged.setMemberTier(GameAccount.MemberTier.TIER_1);
+    }
+    return gameAccountRepository.save(merged);
   }
 
   public List<AllianceApplication> getPendingApplications(Long allianceId) {
@@ -311,6 +379,7 @@ public class AllianceMemberService {
     d.setId(a.getId());
     d.setUserId(a.getUserId());
     d.setMemberTier(a.getMemberTier() != null ? a.getMemberTier().name() : null);
+    d.setAllianceFormalMember(a.getAllianceFormalMember());
     d.setAccountName(a.getAccountName());
     d.setLvbuStarLevel(a.getLvbuStarLevel());
     d.setDamageBonus(a.getDamageBonus());
@@ -468,6 +537,7 @@ public class AllianceMemberService {
       if (parsed != null) {
         // Update memberTier and power if present
         if (parsed.tier != null) ga.setMemberTier(parsed.tier);
+        ga.setAllianceFormalMember(true);
         if (parsed.power != null) {
           long stored;
           if (parsed.power < 100000L) stored = 1L;
@@ -479,13 +549,15 @@ public class AllianceMemberService {
         importedMap.remove(existingName);
       } else {
         // Not in imported list
-        if (ga.getUserId() == null) {
-          // 无主账号：删除
-          idsToDelete.add(ga.getId());
-        } else if (Boolean.TRUE.equals(removeMissing)) {
-          // 如果选择移除不在名单中的成员
-          // 已注册账号：移除出联盟
-          idsToRemove.add(ga.getId());
+        ga.setAllianceFormalMember(false);
+        if (Boolean.TRUE.equals(removeMissing)) {
+          if (ga.getUserId() == null) {
+            idsToDelete.add(ga.getId());
+          } else {
+            idsToRemove.add(ga.getId());
+          }
+        } else {
+          toUpdate.add(ga);
         }
       }
     }
@@ -498,6 +570,7 @@ public class AllianceMemberService {
       newAcc.setAccountName(pm.name);
       newAcc.setAllianceId(allianceId);
       newAcc.setMemberTier(pm.tier);
+      newAcc.setAllianceFormalMember(true);
       if (pm.power != null) {
         long stored;
         if (pm.power < 100000L) stored = 1L;
@@ -569,6 +642,7 @@ public class AllianceMemberService {
     // 移除成员
     account.setAllianceId(null);
     account.setMemberTier(null);
+    account.setAllianceFormalMember(null);
     applicationRepository.deleteAllByAccountId(accountId);
     warApplicationRepository.deleteAllByAccountId(accountId);
     warArrangementRepository.deleteAllByAccountId(accountId);
@@ -582,34 +656,35 @@ public class AllianceMemberService {
     }
     // 批量查询账号
     List<GameAccount> accounts = gameAccountRepository.findAllById(accountIds);
-    
+
     // 收集需要处理的南蛮分组ID
     Set<Long> groupIdsToCheck = new HashSet<>();
-    
+
     for (GameAccount account : accounts) {
       if (account.getAllianceId() == null) {
         continue; // 已不在联盟中
       }
-      
+
       // 处理南蛮分组关联
       if (account.getBarbarianGroupId() != null) {
         groupIdsToCheck.add(account.getBarbarianGroupId());
         account.setBarbarianGroupId(null);
       }
-      
+
       // 移除成员
       account.setAllianceId(null);
       account.setMemberTier(null);
+      account.setAllianceFormalMember(null);
     }
-    
+
     // 批量更新账号
     gameAccountRepository.saveAll(accounts);
-    
+
     // 批量删除申请和战事安排
     applicationRepository.deleteAllByAccountIdIn(accountIds);
     warApplicationRepository.deleteAllByAccountIdIn(accountIds);
     warArrangementRepository.deleteAllByAccountIdIn(accountIds);
-    
+
     // 检查并删除空南蛮分组
     for (Long groupId : groupIdsToCheck) {
       long memberCount = barbarianGroupRepository.countMembersByGroupId(groupId);
@@ -731,6 +806,9 @@ public class AllianceMemberService {
     if (unownedAccount.getMemberTier() != null) {
       userAccount.setMemberTier(unownedAccount.getMemberTier());
     }
+    if (unownedAccount.getAllianceFormalMember() != null) {
+      userAccount.setAllianceFormalMember(unownedAccount.getAllianceFormalMember());
+    }
     if (unownedAccount.getBarbarianGroupId() != null) {
       userAccount.setBarbarianGroupId(unownedAccount.getBarbarianGroupId());
     }
@@ -795,8 +873,9 @@ public class AllianceMemberService {
     // 验证联盟是否存在
     allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    // 获取联盟中的无主账号列表（按账号名称排序）
-    return gameAccountRepository.findByAllianceIdAndUserIdIsNull(allianceId);
+    // 获取联盟中的无主正式成员账号列表（按账号名称排序）
+    return gameAccountRepository.findByAllianceIdAndUserIdIsNullAndAllianceFormalMemberTrue(
+        allianceId);
   }
 
   // Helper container for parsed import rows

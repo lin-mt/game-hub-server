@@ -28,7 +28,7 @@ public interface GameAccountRepository extends JpaRepository<GameAccount, Long> 
   /** 批量清空指定联盟的所有成员的联盟关联 */
   @Modifying
   @Query(
-      "UPDATE GameAccount ga SET ga.allianceId = null, ga.memberTier = null, ga.barbarianGroupId = null WHERE ga.allianceId = :allianceId")
+      "UPDATE GameAccount ga SET ga.allianceId = null, ga.memberTier = null, ga.allianceFormalMember = null, ga.barbarianGroupId = null WHERE ga.allianceId = :allianceId")
   void clearAllianceIdByAllianceId(@Param("allianceId") Long allianceId);
 
   List<GameAccount> findByBarbarianGroupIdOrderByPowerValueDesc(Long barbarianGroupId);
@@ -47,4 +47,7 @@ public interface GameAccountRepository extends JpaRepository<GameAccount, Long> 
 
   /** 查找联盟中的无主账号（userId为null的账号） */
   List<GameAccount> findByAllianceIdAndUserIdIsNull(Long allianceId);
+
+  /** 查找联盟中的无主正式成员账号 */
+  List<GameAccount> findByAllianceIdAndUserIdIsNullAndAllianceFormalMemberTrue(Long allianceId);
 }

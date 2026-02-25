@@ -92,6 +92,7 @@ public class AllianceService {
     alliance.setYyChannelId(request.getYyChannelId());
     alliance.setTencentMeetingCode(request.getTencentMeetingCode());
     alliance.setTencentMeetingPassword(request.getTencentMeetingPassword());
+    alliance.setCarriageTime(request.getCarriageTime());
     alliance.setLeaderId(userId);
 
     return allianceRepository.save(alliance);
@@ -135,6 +136,10 @@ public class AllianceService {
 
     if (request.getTencentMeetingPassword() != null) {
       alliance.setTencentMeetingPassword(request.getTencentMeetingPassword().trim());
+    }
+
+    if (request.getCarriageTime() != null) {
+      alliance.setCarriageTime(request.getCarriageTime().trim());
     }
 
     return allianceRepository.save(alliance);

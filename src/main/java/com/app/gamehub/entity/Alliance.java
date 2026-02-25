@@ -55,6 +55,9 @@ public class Alliance extends BaseEntity {
   @Column(name = "tencent_meeting_password")
   private String tencentMeetingPassword;
 
+  @Column(name = "carriage_time")
+  private String carriageTime;
+
   // 官渡报名时间设置
   @Column(name = "guandu_registration_start_day")
   private Integer guanduRegistrationStartDay; // 1-7 表示星期一到星期日

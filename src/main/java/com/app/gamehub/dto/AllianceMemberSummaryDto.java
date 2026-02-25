@@ -17,6 +17,9 @@ public class AllianceMemberSummaryDto {
   @Schema(description = "阶位")
   private String memberTier;
 
+  @Schema(description = "是否为联盟正式成员")
+  private Boolean allianceFormalMember;
+
   @Schema(description = "账号名称")
   private String accountName;
 
@@ -44,4 +47,3 @@ public class AllianceMemberSummaryDto {
   @Schema(description = "弓兵破坏力")
   private Integer archerSiege;
 }
-
