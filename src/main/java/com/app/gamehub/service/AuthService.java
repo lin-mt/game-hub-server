@@ -104,12 +104,14 @@ public class AuthService {
   public UserInfoResponse getUserCompleteInfo(Long userId) {
     User user = getUserInfo(userId);
     List<Alliance> alliances = allianceRepository.findByLeaderIdOrderByServerIdDesc(userId);
+    List<Alliance> managedAlliances = allianceRepository.findByAdmins_IdOrderByServerIdDesc(userId);
     List<Dynasty> dynasties = dynastyRepository.findByEmperorIdOrderByServerIdDesc(userId);
     List<GameAccount> gameAccounts = gameAccountRepository.findByUserIdOrderByServerIdDesc(userId);
 
     UserInfoResponse response = new UserInfoResponse();
     response.setUser(user);
     response.setAlliances(alliances);
+    response.setManagedAlliances(managedAlliances);
     response.setDynasties(dynasties);
     response.setGameAccounts(gameAccounts);
 

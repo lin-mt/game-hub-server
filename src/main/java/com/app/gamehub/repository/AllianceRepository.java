@@ -13,9 +13,17 @@ public interface AllianceRepository extends JpaRepository<Alliance, Long> {
 
   Optional<Alliance> findByCode(String code);
 
+  @Query("SELECT a FROM Alliance a LEFT JOIN FETCH a.admins WHERE a.id = :allianceId")
+  Optional<Alliance> findByIdWithAdmins(@Param("allianceId") Long allianceId);
+
+  @Query("SELECT a FROM Alliance a LEFT JOIN FETCH a.admins WHERE a.code = :code")
+  Optional<Alliance> findByCodeWithAdmins(@Param("code") String code);
+
   boolean existsByCode(String code);
 
   List<Alliance> findByLeaderIdOrderByServerIdDesc(Long leaderId);
+
+  List<Alliance> findByAdmins_IdOrderByServerIdDesc(Long adminId);
 
   List<Alliance> findByServerIdOrderByCreatedAtDesc(Integer serverId);
 

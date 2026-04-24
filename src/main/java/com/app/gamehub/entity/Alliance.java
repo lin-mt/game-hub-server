@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import java.util.HashSet;
+import java.util.Set;
 
 @Getter
 @Setter
@@ -74,4 +76,12 @@ public class Alliance extends BaseEntity {
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "leader_id", insertable = false, updatable = false)
   private User leader;
+
+  @ManyToMany(fetch = FetchType.LAZY)
+  @JoinTable(
+      name = "alliance_admins",
+      joinColumns = @JoinColumn(name = "alliance_id"),
+      inverseJoinColumns = @JoinColumn(name = "user_id")
+  )
+  private Set<User> admins = new HashSet<>();
 }

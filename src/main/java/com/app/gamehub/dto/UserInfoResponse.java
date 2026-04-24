@@ -18,6 +18,9 @@ public class UserInfoResponse {
   @Schema(description = "用户创建的联盟列表")
   private List<Alliance> alliances;
 
+  @Schema(description = "用户管理的联盟列表（作为管理员）")
+  private List<Alliance> managedAlliances;
+
   @Schema(description = "用户创建的王朝列表")
   private List<Dynasty> dynasties;
 

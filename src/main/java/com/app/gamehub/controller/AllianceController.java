@@ -2,6 +2,7 @@ package com.app.gamehub.controller;
 
 import com.app.gamehub.dto.*;
 import com.app.gamehub.entity.Alliance;
+import com.app.gamehub.entity.User;
 import com.app.gamehub.service.AllianceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -108,5 +109,31 @@ public class AllianceController {
       @Parameter(description = "联盟ID", example = "1") @PathVariable Long allianceId) {
     Alliance alliance = allianceService.clearGuanduRegistrationTime(allianceId);
     return ApiResponse.success("官渡报名时间设置已清除", alliance);
+  }
+
+  @PostMapping("/{allianceId}/admins")
+  @Operation(summary = "添加联盟管理员")
+  public ApiResponse<Alliance> addAllianceAdmin(
+      @Parameter(description = "联盟ID", example = "1") @PathVariable Long allianceId,
+      @RequestBody AddAllianceAdminRequest request) {
+    Alliance alliance = allianceService.addAllianceAdmin(allianceId, request.getUserId());
+    return ApiResponse.success("管理员添加成功", alliance);
+  }
+
+  @DeleteMapping("/{allianceId}/admins/{userId}")
+  @Operation(summary = "移除联盟管理员")
+  public ApiResponse<Alliance> removeAllianceAdmin(
+      @Parameter(description = "联盟ID", example = "1") @PathVariable Long allianceId,
+      @Parameter(description = "用户ID", example = "1") @PathVariable Long userId) {
+    Alliance alliance = allianceService.removeAllianceAdmin(allianceId, userId);
+    return ApiResponse.success("管理员移除成功", alliance);
+  }
+
+  @GetMapping("/{allianceId}/admins")
+  @Operation(summary = "获取联盟管理员列表")
+  public ApiResponse<List<User>> getAllianceAdmins(
+      @Parameter(description = "联盟ID", example = "1") @PathVariable Long allianceId) {
+    List<User> admins = allianceService.getAllianceAdmins(allianceId);
+    return ApiResponse.success(admins);
   }
 }

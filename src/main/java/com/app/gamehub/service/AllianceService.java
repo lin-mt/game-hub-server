@@ -8,6 +8,7 @@ import com.app.gamehub.dto.UpdateGuanduRegistrationTimeRequest;
 import com.app.gamehub.dto.UpdateWarLimitsRequest;
 import com.app.gamehub.entity.Alliance;
 import com.app.gamehub.entity.GameAccount;
+import com.app.gamehub.entity.User;
 import com.app.gamehub.exception.BusinessException;
 import com.app.gamehub.repository.AllianceApplicationRepository;
 import com.app.gamehub.repository.AllianceRepository;
@@ -311,14 +312,21 @@ public class AllianceService {
 
   public Alliance getAllianceById(Long allianceId) {
     return allianceRepository
-        .findById(allianceId)
+        .findByIdWithAdmins(allianceId)
         .orElseThrow(() -> new BusinessException("联盟不存在"));
   }
 
   public Alliance getAllianceByCode(String code) {
     return allianceRepository
-        .findByCode(code.toUpperCase())
+        .findByCodeWithAdmins(code.toUpperCase())
         .orElseThrow(() -> new BusinessException("联盟不存在"));
+  }
+
+  public List<User> getAllianceAdmins(Long allianceId) {
+    Alliance alliance = allianceRepository
+        .findByIdWithAdmins(allianceId)
+        .orElseThrow(() -> new BusinessException("联盟不存在"));
+    return List.copyOf(alliance.getAdmins());
   }
 
   @Transactional
@@ -431,5 +439,68 @@ public class AllianceService {
     int endTotalMinutes = (alliance.getGuanduRegistrationEndDay() - 1) * 1440 + alliance.getGuanduRegistrationEndMinute();
 
     return currentTotalMinutes >= startTotalMinutes && currentTotalMinutes < endTotalMinutes;
+  }
+
+  @Transactional
+  public Alliance addAllianceAdmin(Long allianceId, Long adminUserId) {
+    Long userId = UserContext.getUserId();
+    Alliance alliance =
+        allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
+
+    // 验证是否为盟主
+    if (!alliance.getLeaderId().equals(userId)) {
+      throw new BusinessException("只有盟主可以添加管理员");
+    }
+
+    // 验证管理员用户是否存在
+    User adminUser = userRepository.findById(adminUserId).orElseThrow(() -> new BusinessException("用户不存在"));
+
+    // 验证管理员是否已经是盟主
+    if (alliance.getLeaderId().equals(adminUserId)) {
+      throw new BusinessException("盟主不能成为管理员");
+    }
+
+    // 验证管理员是否已经是管理员
+    if (alliance.getAdmins().contains(adminUser)) {
+      throw new BusinessException("该用户已经是管理员");
+    }
+
+    // 验证管理员是否为联盟成员（有账号在联盟中）
+    boolean isMember = gameAccountRepository.existsByUserIdAndServerIdAndAllianceIdIsNotNull(adminUserId, alliance.getServerId());
+    if (!isMember) {
+      throw new BusinessException("只有联盟成员才能成为管理员");
+    }
+
+    alliance.getAdmins().add(adminUser);
+    Alliance savedAlliance = allianceRepository.save(alliance);
+    log.info("联盟 {} 添加管理员 {}", alliance.getId(), adminUserId);
+
+    return savedAlliance;
+  }
+
+  @Transactional
+  public Alliance removeAllianceAdmin(Long allianceId, Long adminUserId) {
+    Long userId = UserContext.getUserId();
+    Alliance alliance =
+        allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
+
+    // 验证是否为盟主
+    if (!alliance.getLeaderId().equals(userId)) {
+      throw new BusinessException("只有盟主可以移除管理员");
+    }
+
+    // 验证管理员用户是否存在
+    User adminUser = userRepository.findById(adminUserId).orElseThrow(() -> new BusinessException("用户不存在"));
+
+    // 验证管理员是否是管理员
+    if (!alliance.getAdmins().contains(adminUser)) {
+      throw new BusinessException("该用户不是管理员");
+    }
+
+    alliance.getAdmins().remove(adminUser);
+    Alliance savedAlliance = allianceRepository.save(alliance);
+    log.info("联盟 {} 移除管理员 {}", alliance.getId(), adminUserId);
+
+    return savedAlliance;
   }
 }
