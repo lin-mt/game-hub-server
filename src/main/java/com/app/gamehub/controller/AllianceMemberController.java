@@ -6,6 +6,7 @@ import com.app.gamehub.dto.BulkUpdateMembersFromTextRequest;
 import com.app.gamehub.dto.ClaimFormalMemberRequest;
 import com.app.gamehub.dto.JoinAllianceRequest;
 import com.app.gamehub.dto.ProcessApplicationRequest;
+import com.app.gamehub.dto.UnownedAccountDto;
 import com.app.gamehub.entity.AllianceApplication;
 import com.app.gamehub.entity.GameAccount;
 import com.app.gamehub.service.AllianceMemberService;
@@ -120,9 +121,9 @@ public class AllianceMemberController {
 
   @GetMapping("/alliances/{allianceId}/unowned-accounts")
   @Operation(summary = "获取联盟中的无主账号列表")
-  public ApiResponse<List<GameAccount>> getUnownedAccounts(
+  public ApiResponse<List<UnownedAccountDto>> getUnownedAccounts(
       @Parameter(description = "联盟ID", example = "1") @PathVariable Long allianceId) {
-    List<GameAccount> unownedAccounts = allianceMemberService.getUnownedAccounts(allianceId);
+    List<UnownedAccountDto> unownedAccounts = allianceMemberService.getUnownedAccounts(allianceId);
     return ApiResponse.success(unownedAccounts);
   }
 }

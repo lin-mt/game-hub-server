@@ -5,6 +5,7 @@ import com.alibaba.excel.write.style.column.LongestMatchColumnWidthStyleStrategy
 import com.app.gamehub.dto.AllianceMemberExportDto;
 import com.app.gamehub.dto.AllianceMemberSummaryDto;
 import com.app.gamehub.dto.JoinAllianceRequest;
+import com.app.gamehub.dto.UnownedAccountDto;
 import com.app.gamehub.entity.Alliance;
 import com.app.gamehub.entity.AllianceApplication;
 import com.app.gamehub.entity.GameAccount;
@@ -869,13 +870,18 @@ public class AllianceMemberService {
    * @param allianceId 联盟ID
    * @return 无主账号列表
    */
-  public List<GameAccount> getUnownedAccounts(Long allianceId) {
+  public List<UnownedAccountDto> getUnownedAccounts(Long allianceId) {
     // 验证联盟是否存在
     allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
 
     // 获取联盟中的无主正式成员账号列表（按账号名称排序）
-    return gameAccountRepository.findByAllianceIdAndUserIdIsNullAndAllianceFormalMemberTrue(
+    List<GameAccount> accounts = gameAccountRepository.findByAllianceIdAndUserIdIsNullAndAllianceFormalMemberTrue(
         allianceId);
+
+    // 转换为DTO
+    return accounts.stream()
+        .map(UnownedAccountDto::fromGameAccount)
+        .collect(java.util.stream.Collectors.toList());
   }
 
   // Helper container for parsed import rows
