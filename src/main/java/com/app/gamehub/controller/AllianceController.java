@@ -120,6 +120,15 @@ public class AllianceController {
     return ApiResponse.success("管理员添加成功", alliance);
   }
 
+  @PostMapping("/{allianceId}/admins/bulk")
+  @Operation(summary = "批量添加联盟管理员")
+  public ApiResponse<Alliance> addAllianceAdmins(
+      @Parameter(description = "联盟ID", example = "1") @PathVariable Long allianceId,
+      @RequestBody AddAllianceAdminsRequest request) {
+    Alliance alliance = allianceService.addAllianceAdmins(allianceId, request.getUserIds());
+    return ApiResponse.success("管理员添加成功", alliance);
+  }
+
   @DeleteMapping("/{allianceId}/admins/{userId}")
   @Operation(summary = "移除联盟管理员")
   public ApiResponse<Alliance> removeAllianceAdmin(

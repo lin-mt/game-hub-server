@@ -189,6 +189,10 @@ public class GameAccountService {
         // 删除无主账号
         gameAccountRepository.delete(unowned);
         entityManager.flush();
+
+        // 清理该账号的所有联盟申请记录
+        clearAllianceApplications(savedAccount.getId());
+
         entityManager.clear();
         
         log.info("成功合并无主账号 {} 到新创建的用户账号 {}", unownedAccountId, newAccountId);
@@ -202,7 +206,18 @@ public class GameAccountService {
       }
     }
 
-    return gameAccountRepository.save(account);
+    GameAccount savedAccount = gameAccountRepository.save(account);
+    if (savedAccount.getId() != null) {
+      clearAllianceApplications(savedAccount.getId());
+    }
+    return savedAccount;
+  }
+
+  private void clearAllianceApplications(Long accountId) {
+    if (accountId != null) {
+      allianceApplicationRepository.deleteAllByAccountId(accountId);
+      allianceApplicationRepository.flush();
+    }
   }
 
   @Transactional
@@ -213,11 +228,13 @@ public class GameAccountService {
             .findById(accountId)
             .orElseThrow(() -> new BusinessException("游戏账号不存在"));
 
-    // 验证权限：账号所有者或盟主可以更新
+    // 验证权限：账号所有者、盟主或联盟管理员可以更新
     boolean canUpdate = account.getUserId() != null && account.getUserId().equals(userId);
     if (!canUpdate && account.getAllianceId() != null) {
       Alliance alliance = allianceRepository.findById(account.getAllianceId()).orElse(null);
-      canUpdate = alliance != null && alliance.getLeaderId().equals(userId);
+      canUpdate = alliance != null && (
+          alliance.getLeaderId().equals(userId)
+              || alliance.getAdmins().stream().anyMatch(admin -> userId.equals(admin.getId())));
     }
 
     if (!canUpdate) {
@@ -434,11 +451,13 @@ public class GameAccountService {
             .findById(accountId)
             .orElseThrow(() -> new BusinessException("游戏账号不存在"));
 
-    // 验证权限：账号所有者或所在联盟盟主可以更新
+    // 验证权限：账号所有者、盟主或联盟管理员可以更新
     boolean canUpdate = account.getUserId() != null && account.getUserId().equals(userId);
     if (!canUpdate && account.getAllianceId() != null) {
       Alliance alliance = allianceRepository.findById(account.getAllianceId()).orElse(null);
-      canUpdate = alliance != null && alliance.getLeaderId().equals(userId);
+      canUpdate = alliance != null && (
+          alliance.getLeaderId().equals(userId)
+              || alliance.getAdmins().stream().anyMatch(admin -> userId.equals(admin.getId())));
     }
     if (!canUpdate) {
       throw new BusinessException("没有权限更新此账号的属性");
@@ -585,7 +604,10 @@ public class GameAccountService {
     gameAccountRepository.delete(unownedAccount);
     entityManager.flush(); // 强制执行SQL
 
-    // 5. 清除EntityManager缓存，确保后续查询从数据库获取最新数据
+    // 5. 清理该账号的所有联盟申请记录
+    clearAllianceApplications(savedUserAccount.getId());
+
+    // 6. 清除EntityManager缓存，确保后续查询从数据库获取最新数据
     entityManager.clear();
     log.info("已删除无主账号 {}", unownedAccountId);
 

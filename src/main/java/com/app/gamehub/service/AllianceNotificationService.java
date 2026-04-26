@@ -40,14 +40,18 @@ public class AllianceNotificationService {
   public void sendAllianceNotification(SendAllianceNotificationRequest request) {
     Long currentUserId = UserContext.getUserId();
 
-    // 验证联盟存在且当前用户是盟主
+    // 验证联盟存在且当前用户是盟主或管理员
     Alliance alliance =
         allianceRepository
             .findById(request.getAllianceId())
             .orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!alliance.getLeaderId().equals(currentUserId)) {
-      throw new BusinessException("只有盟主可以发送联盟通知");
+    boolean isLeaderOrAdmin =
+        alliance.getLeaderId().equals(currentUserId)
+            || alliance.getAdmins().stream().anyMatch(admin -> currentUserId.equals(admin.getId()));
+
+    if (!isLeaderOrAdmin) {
+      throw new BusinessException("只有盟主或管理员可以发送联盟通知");
     }
 
     // 获取联盟所有成员账号

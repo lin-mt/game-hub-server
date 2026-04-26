@@ -4,6 +4,7 @@ import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.ExcelWriter;
 import com.alibaba.excel.write.metadata.WriteSheet;
 import com.alibaba.excel.write.style.column.LongestMatchColumnWidthStyleStrategy;
+import com.app.gamehub.dto.AddToWarBatchRequest;
 import com.app.gamehub.dto.TacticSortMode;
 import com.app.gamehub.dto.TacticTemplateConfig;
 import com.app.gamehub.dto.UseTacticRequest;
@@ -404,6 +405,14 @@ public class WarService {
     return warArrangement;
   }
 
+  private boolean isAllianceLeaderOrAdmin(Alliance alliance) {
+    Long currentUserId = UserContext.getUserId();
+    if (currentUserId.equals(alliance.getLeaderId())) {
+      return true;
+    }
+    return alliance.getAdmins().stream().anyMatch(admin -> currentUserId.equals(admin.getId()));
+  }
+
   @Transactional
   public WarArrangement addToWar(Long accountId, WarType warType, Boolean isSubstitute) {
     GameAccount account =
@@ -415,8 +424,8 @@ public class WarService {
         allianceRepository
             .findById(account.getAllianceId())
             .orElseThrow(() -> new BusinessException("账号所在的联盟不存在"));
-    if (!UserContext.getUserId().equals(alliance.getLeaderId())) {
-      throw new BusinessException("只有盟主才能添加成员到战事中");
+    if (!isAllianceLeaderOrAdmin(alliance)) {
+      throw new BusinessException("只有盟主或管理员才能添加成员到战事中");
     }
 
     boolean targetIsSubstitute = Boolean.TRUE.equals(isSubstitute);
@@ -437,7 +446,7 @@ public class WarService {
       ReentrantLock lock = getWarApplicationLock(alliance.getId(), warType, targetIsSubstitute);
       lock.lock();
       try {
-        // 盟主手动添加同样必须遵守官渡主力/替补人数上限
+        // 盟主或管理员手动添加同样必须遵守官渡主力/替补人数上限
         checkWarLimit(alliance, warType, targetIsSubstitute);
 
         WarApplication warApplication = new WarApplication();
@@ -479,6 +488,19 @@ public class WarService {
   }
 
   @Transactional
+  public List<WarArrangement> addToWarBatch(AddToWarBatchRequest request) {
+    if (request.getAccountIds() == null || request.getAccountIds().isEmpty()) {
+      return List.of();
+    }
+
+    List<WarArrangement> arrangements = new ArrayList<>();
+    for (Long accountId : request.getAccountIds()) {
+      arrangements.add(addToWar(accountId, request.getWarType(), request.getIsSubstitute()));
+    }
+    return arrangements;
+  }
+
+  @Transactional
   public void removeFromWar(Long accountId, WarType warType) {
     GameAccount account =
         gameAccountRepository
@@ -517,11 +539,11 @@ public class WarService {
     WarType warType = request.getWarType();
     String tacticKey = request.getTactic();
 
-    // 验证权限：只有盟主可以使用战术
+    // 验证权限：只有盟主或管理员可以使用战术
     Alliance alliance =
         allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
-    if (!Objects.equals(alliance.getLeaderId(), UserContext.getUserId())) {
-      throw new BusinessException("只有盟主可以使用战术");
+    if (!isAllianceLeaderOrAdmin(alliance)) {
+      throw new BusinessException("只有盟主或管理员可以使用战术");
     }
 
     // 先删除现有安排及分组

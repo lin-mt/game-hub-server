@@ -76,12 +76,19 @@ public class AllianceMemberController {
     return ApiResponse.success(applications);
   }
 
+  @DeleteMapping("/applications/{applicationId}")
+  @Operation(summary = "撤回联盟申请")
+  public ApiResponse<Void> cancelApplication(
+      @Parameter(description = "申请ID", example = "1") @PathVariable Long applicationId) {
+    allianceMemberService.cancelApplication(applicationId);
+    return ApiResponse.success("申请已撤回", null);
+  }
+
   @GetMapping("/accounts/{accountId}/applications")
-  @Operation(summary = "获取账号申请历史")
+  @Operation(summary = "获取账号的联盟申请记录")
   public ApiResponse<List<AllianceApplication>> getAccountApplications(
       @Parameter(description = "账号ID", example = "1") @PathVariable Long accountId) {
-    List<AllianceApplication> applications =
-        allianceMemberService.getAccountApplications(accountId);
+    List<AllianceApplication> applications = allianceMemberService.getApplicationsByAccount(accountId);
     return ApiResponse.success(applications);
   }
 

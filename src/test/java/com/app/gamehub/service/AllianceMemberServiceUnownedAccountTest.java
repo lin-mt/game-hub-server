@@ -178,6 +178,9 @@ public class AllianceMemberServiceUnownedAccountTest {
     when(gameAccountRepository.findById(1L)).thenReturn(Optional.of(testAccount));
     when(gameAccountRepository.findByAllianceIdAndAccountName(testAlliance.getId(), "测试账号"))
         .thenReturn(Optional.empty());
+    when(allianceApplicationRepository.existsByAccountIdAndAllianceIdAndStatus(
+            testAccount.getId(), testAlliance.getId(), AllianceApplication.ApplicationStatus.PENDING))
+        .thenReturn(false);
     when(gameAccountRepository.save(any(GameAccount.class))).thenAnswer(invocation -> invocation.getArgument(0));
     when(allianceApplicationRepository.save(any(AllianceApplication.class))).thenAnswer(invocation -> {
       AllianceApplication app = invocation.getArgument(0);
@@ -205,6 +208,47 @@ public class AllianceMemberServiceUnownedAccountTest {
           account.getAllianceId().equals(testAlliance.getId()) &&
           account.getMemberTier() == GameAccount.MemberTier.TIER_1
       ));
+
+      // 验证检查仅针对当前联盟的待处理申请
+      verify(allianceApplicationRepository)
+          .existsByAccountIdAndAllianceIdAndStatus(eq(testAccount.getId()), eq(testAlliance.getId()), eq(AllianceApplication.ApplicationStatus.PENDING));
+
+      // 验证老申请记录被清理，只保留当前批准的申请
+      verify(allianceApplicationRepository).deleteAllByAccountId(testAccount.getId());
+      verify(allianceApplicationRepository)
+          .deleteAllByAccountIdAndIdNot(eq(testAccount.getId()), eq(1L));
+    }
+  }
+
+  @Test
+  void testProcessApplicationApprovedClearsOtherApplications() {
+    // 账户还没加入联盟
+    testAccount.setAllianceId(null);
+
+    AllianceApplication application = new AllianceApplication();
+    application.setId(10L);
+    application.setAccountId(testAccount.getId());
+    application.setAllianceId(testAlliance.getId());
+    application.setStatus(AllianceApplication.ApplicationStatus.PENDING);
+
+    when(allianceApplicationRepository.findById(10L)).thenReturn(Optional.of(application));
+    when(allianceRepository.findById(testAlliance.getId())).thenReturn(Optional.of(testAlliance));
+    when(gameAccountRepository.findById(testAccount.getId())).thenReturn(Optional.of(testAccount));
+    when(gameAccountRepository.save(any(GameAccount.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(allianceApplicationRepository.save(any(AllianceApplication.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+    try (MockedStatic<UserContext> mockedUserContext = mockStatic(UserContext.class)) {
+      mockedUserContext.when(UserContext::getUserId).thenReturn(testUser.getId());
+
+      AllianceApplication result = allianceMemberService.processApplication(10L, true);
+
+      assertNotNull(result);
+      assertEquals(AllianceApplication.ApplicationStatus.APPROVED, result.getStatus());
+      assertEquals(testUser.getId(), result.getProcessedBy());
+
+      verify(gameAccountRepository).save(testAccount);
+      verify(allianceApplicationRepository)
+          .deleteAllByAccountIdAndIdNot(eq(testAccount.getId()), eq(10L));
     }
   }
 }

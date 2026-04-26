@@ -1,6 +1,7 @@
 package com.app.gamehub.controller;
 
 import com.app.gamehub.dto.ApiResponse;
+import com.app.gamehub.dto.AddToWarBatchRequest;
 import com.app.gamehub.dto.ProcessApplicationRequest;
 import com.app.gamehub.dto.UseTacticRequest;
 import com.app.gamehub.dto.WarLimitStatusResponse;
@@ -59,13 +60,21 @@ public class WarController {
   }
 
   @PostMapping("/add-to-war/{accountId}")
-  @Operation(summary = "盟主直接添加成员到战事中")
+  @Operation(summary = "盟主/管理员直接添加成员到战事中")
   public ApiResponse<WarArrangement> addToWar(
       @Parameter(description = "账号ID", example = "1") @PathVariable Long accountId,
       @Parameter(description = "战事类型") @RequestParam WarType warType,
       @Parameter(description = "是否替补") @RequestParam Boolean isSubstitute) {
     WarArrangement war = warService.addToWar(accountId, warType, isSubstitute);
     return ApiResponse.success("添加成功", war);
+  }
+
+  @PostMapping("/add-to-war-batch")
+  @Operation(summary = "盟主/管理员批量添加成员到战事中")
+  public ApiResponse<List<WarArrangement>> addToWarBatch(
+      @Valid @RequestBody AddToWarBatchRequest request) {
+    List<WarArrangement> wars = warService.addToWarBatch(request);
+    return ApiResponse.success("批量添加成功", wars);
   }
 
   @PostMapping("/remove-from-war/{accountId}")

@@ -96,6 +96,7 @@ class GameAccountServiceAllianceCreationTest {
           account.getAllianceId().equals(100L) && 
           account.getMemberTier() == GameAccount.MemberTier.TIER_1
       ));
+      verify(allianceApplicationRepository).deleteAllByAccountId(1L);
     }
   }
 
@@ -138,6 +139,7 @@ class GameAccountServiceAllianceCreationTest {
       verify(warArrangementRepository).transferToAccount(200L, 1L);
       verify(positionReservationRepository).transferToAccount(200L, 1L);
       verify(carriageQueueRepository).transferToAccount(200L, 1L);
+      verify(allianceApplicationRepository).deleteAllByAccountId(1L);
 
       // 验证删除无主账号
       verify(gameAccountRepository).delete(unownedAccount);

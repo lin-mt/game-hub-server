@@ -48,12 +48,12 @@ public class WarGroupService {
     Long userId = UserContext.getUserId();
     Long allianceId = request.getAllianceId();
 
-    // 验证是否为盟主
+    // 验证是否为盟主或管理员
     Alliance alliance =
         allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!alliance.getLeaderId().equals(userId)) {
-      throw new BusinessException("只有盟主可以创建战事分组");
+    if (!isAllianceLeaderOrAdmin(alliance, userId)) {
+      throw new BusinessException("只有盟主或管理员可以创建战事分组");
     }
 
     WarGroup warGroup = new WarGroup();
@@ -71,14 +71,14 @@ public class WarGroupService {
     WarGroup warGroup =
         warGroupRepository.findById(groupId).orElseThrow(() -> new BusinessException("战事分组不存在"));
 
-    // 验证是否为盟主
+    // 验证是否为盟主或管理员
     Alliance alliance =
         allianceRepository
             .findById(warGroup.getAllianceId())
             .orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!alliance.getLeaderId().equals(userId)) {
-      throw new BusinessException("只有盟主可以更新战事分组");
+    if (!isAllianceLeaderOrAdmin(alliance, userId)) {
+      throw new BusinessException("只有盟主或管理员可以更新战事分组");
     }
 
     if (request.getGroupName() != null && !request.getGroupName().trim().isEmpty()) {
@@ -97,14 +97,14 @@ public class WarGroupService {
     WarGroup warGroup =
         warGroupRepository.findById(groupId).orElseThrow(() -> new BusinessException("战事分组不存在"));
 
-    // 验证是否为盟主
+    // 验证是否为盟主或管理员
     Alliance alliance =
         allianceRepository
             .findById(warGroup.getAllianceId())
             .orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!alliance.getLeaderId().equals(userId)) {
-      throw new BusinessException("只有盟主可以删除战事分组");
+    if (!isAllianceLeaderOrAdmin(alliance, userId)) {
+      throw new BusinessException("只有盟主或管理员可以删除战事分组");
     }
 
     // 删除分组前，将分组内的成员移动到机动人员
@@ -135,14 +135,14 @@ public class WarGroupService {
       throw new BusinessException("账号未加入联盟");
     }
 
-    // 验证是否为盟主
+    // 验证是否为盟主或管理员
     Alliance alliance =
         allianceRepository
             .findById(account.getAllianceId())
             .orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!alliance.getLeaderId().equals(userId)) {
-      throw new BusinessException("只有盟主可以安排成员");
+    if (!isAllianceLeaderOrAdmin(alliance, userId)) {
+      throw new BusinessException("只有盟主或管理员可以安排成员");
     }
 
     // 验证分组是否存在（如果指定了分组）
@@ -185,12 +185,12 @@ public class WarGroupService {
   @Transactional
   public void clearWarArrangements(Long allianceId, WarType warType) {
     Long userId = UserContext.getUserId();
-    // 验证是否为盟主
+    // 验证是否为盟主或管理员
     Alliance alliance =
         allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!alliance.getLeaderId().equals(userId)) {
-      throw new BusinessException("只有盟主可以清空战事安排");
+    if (!isAllianceLeaderOrAdmin(alliance, userId)) {
+      throw new BusinessException("只有盟主或管理员可以清空战事安排");
     }
 
     warApplicationRepository.deleteAllByAllianceId(allianceId);
@@ -200,14 +200,14 @@ public class WarGroupService {
   @Transactional
   public void clearWarArrangementsWithNotification(ClearWarArrangementsRequest request) {
     Long userId = UserContext.getUserId();
-    // 验证是否为盟主
+    // 验证是否为盟主或管理员
     Alliance alliance =
         allianceRepository
             .findById(request.getAllianceId())
             .orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!alliance.getLeaderId().equals(userId)) {
-      throw new BusinessException("只有盟主可以清空战事安排");
+    if (!isAllianceLeaderOrAdmin(alliance, userId)) {
+      throw new BusinessException("只有盟主或管理员可以清空战事安排");
     }
 
     // 如果需要发送通知
@@ -218,6 +218,13 @@ public class WarGroupService {
     } else {
       clearWarArrangements(request.getAllianceId(), request.getWarType());
     }
+  }
+
+  private boolean isAllianceLeaderOrAdmin(Alliance alliance, Long userId) {
+    if (userId.equals(alliance.getLeaderId())) {
+      return true;
+    }
+    return alliance.getAdmins().stream().anyMatch(admin -> userId.equals(admin.getId()));
   }
 
   private void sendGuanduNotification(ClearWarArrangementsRequest request, Alliance alliance) {

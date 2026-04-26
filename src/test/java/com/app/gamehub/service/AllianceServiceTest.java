@@ -2,6 +2,7 @@ package com.app.gamehub.service;
 
 import com.app.gamehub.entity.Alliance;
 import com.app.gamehub.entity.GameAccount;
+import com.app.gamehub.entity.User;
 import com.app.gamehub.exception.BusinessException;
 import com.app.gamehub.repository.*;
 import com.app.gamehub.util.AllianceCodeGenerator;
@@ -207,5 +208,34 @@ class AllianceServiceTest {
             verify(warGroupRepository, never()).deleteByAllianceId(any());
             verify(allianceRepository, never()).delete(any());
         }
+    }
+
+    @Test
+    void addAllianceAdmins_Success() {
+        try (MockedStatic<UserContext> mockedUserContext = mockStatic(UserContext.class)) {
+            mockedUserContext.when(UserContext::getUserId).thenReturn(userId);
+
+            when(allianceRepository.findById(allianceId)).thenReturn(Optional.of(alliance));
+            when(userRepository.findById(2L)).thenReturn(Optional.of(createUser(2L, "玩家A")));
+            when(userRepository.findById(3L)).thenReturn(Optional.of(createUser(3L, "玩家B")));
+            when(gameAccountRepository.existsByUserIdAndServerIdAndAllianceIdIsNotNull(2L, alliance.getServerId())).thenReturn(true);
+            when(gameAccountRepository.existsByUserIdAndServerIdAndAllianceIdIsNotNull(3L, alliance.getServerId())).thenReturn(true);
+            when(allianceRepository.save(any(Alliance.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            Alliance result = allianceService.addAllianceAdmins(allianceId, Arrays.asList(2L, 3L));
+
+            assertNotNull(result);
+            assertEquals(2, result.getAdmins().size());
+            assertTrue(result.getAdmins().stream().anyMatch(admin -> admin.getId().equals(2L)));
+            assertTrue(result.getAdmins().stream().anyMatch(admin -> admin.getId().equals(3L)));
+            verify(allianceRepository).save(any(Alliance.class));
+        }
+    }
+
+    private User createUser(Long id, String nickname) {
+        User user = new User();
+        user.setId(id);
+        user.setNickname(nickname);
+        return user;
     }
 }

@@ -23,7 +23,16 @@ public interface AllianceApplicationRepository extends JpaRepository<AllianceApp
 
   boolean existsByAccountIdAndStatus(Long accountId, AllianceApplication.ApplicationStatus status);
 
+  boolean existsByAccountIdAndAllianceIdAndStatus(
+      Long accountId, Long allianceId, AllianceApplication.ApplicationStatus status);
+
   void deleteAllByAccountId(Long id);
+
+  @Modifying
+  @Transactional
+  @Query("DELETE FROM AllianceApplication aa WHERE aa.accountId = :accountId AND aa.id <> :excludeId")
+  void deleteAllByAccountIdAndIdNot(
+      @Param("accountId") Long accountId, @Param("excludeId") Long excludeId);
 
   void deleteAllByAllianceId(Long allianceId);
 

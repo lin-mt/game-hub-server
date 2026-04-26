@@ -77,6 +77,22 @@ public class AllianceMemberService {
   }
 
   @Transactional
+  protected void clearAllianceApplications(Long accountId) {
+    if (accountId != null) {
+      applicationRepository.deleteAllByAccountId(accountId);
+      applicationRepository.flush();
+    }
+  }
+
+  @Transactional
+  protected void clearAllianceApplicationsExcept(Long accountId, Long excludeApplicationId) {
+    if (accountId != null && excludeApplicationId != null) {
+      applicationRepository.deleteAllByAccountIdAndIdNot(accountId, excludeApplicationId);
+      applicationRepository.flush();
+    }
+  }
+
+  @Transactional
   public AllianceApplication applyToJoinAlliance(JoinAllianceRequest request) {
     Long accountId = request.getAccountId();
 
@@ -114,9 +130,9 @@ public class AllianceMemberService {
       return null;
     }
 
-    // 检查是否已有待处理的申请
-    if (applicationRepository.existsByAccountIdAndStatus(
-        accountId, AllianceApplication.ApplicationStatus.PENDING)) {
+    // 检查是否已有对该联盟的待处理申请
+    if (applicationRepository.existsByAccountIdAndAllianceIdAndStatus(
+        accountId, alliance.getId(), AllianceApplication.ApplicationStatus.PENDING)) {
       throw new BusinessException("已有待处理的申请，请等待处理结果");
     }
 
@@ -130,7 +146,7 @@ public class AllianceMemberService {
       account.setServerId(alliance.getServerId());
       GameAccount merged = mergeUnownedAccountToUserAccount(account, unownedAccount.get());
       merged.setAllianceFormalMember(Boolean.TRUE.equals(merged.getAllianceFormalMember()));
-      gameAccountRepository.save(merged);
+      clearAllianceApplications(merged.getId());
       log.info("用户 {} 通过同名无主账号直接加入联盟 {}", UserContext.getUserId(), alliance.getId());
       return null;
     }
@@ -147,6 +163,7 @@ public class AllianceMemberService {
       log.info("账号 {} 申请加入联盟 {}，等待审核", accountId, alliance.getId());
     } else {
       // 不需要审核，直接通过
+      clearAllianceApplications(accountId);
       application.setStatus(AllianceApplication.ApplicationStatus.APPROVED);
       application.setProcessedBy(alliance.getLeaderId()); // 系统自动处理，记录为盟主处理
 
@@ -160,7 +177,11 @@ public class AllianceMemberService {
       log.info("账号 {} 自动加入联盟 {}（无需审核）", accountId, alliance.getId());
     }
 
-    return applicationRepository.save(application);
+    AllianceApplication savedApplication = applicationRepository.save(application);
+    if (savedApplication.getStatus() == AllianceApplication.ApplicationStatus.APPROVED) {
+      clearAllianceApplicationsExcept(accountId, savedApplication.getId());
+    }
+    return savedApplication;
   }
 
   @Transactional
@@ -171,14 +192,17 @@ public class AllianceMemberService {
             .findById(applicationId)
             .orElseThrow(() -> new BusinessException("申请不存在"));
 
-    // 验证是否为盟主
+    // 验证是否为盟主或管理员
     Alliance alliance =
         allianceRepository
             .findById(application.getAllianceId())
             .orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!alliance.getLeaderId().equals(userId)) {
-      throw new BusinessException("只有盟主可以处理申请");
+    boolean isAllianceAdmin = alliance.getLeaderId().equals(userId)
+        || alliance.getAdmins().stream().anyMatch(admin -> userId.equals(admin.getId()));
+
+    if (!isAllianceAdmin) {
+      throw new BusinessException("只有盟主或管理员可以处理申请");
     }
 
     // 验证申请状态
@@ -220,7 +244,12 @@ public class AllianceMemberService {
     }
 
     application.setProcessedBy(userId);
-    return applicationRepository.save(application);
+
+    AllianceApplication savedApplication = applicationRepository.save(application);
+    if (approved) {
+      clearAllianceApplicationsExcept(application.getAccountId(), savedApplication.getId());
+    }
+    return savedApplication;
   }
 
   @Transactional
@@ -241,9 +270,11 @@ public class AllianceMemberService {
             .findById(account.getAllianceId())
             .orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!alliance.getLeaderId().equals(userId)
-        && (account.getUserId() == null || !account.getUserId().equals(userId))) {
-      throw new BusinessException("只有盟主或账号本人可以操作账号退出联盟");
+    boolean isAllianceAdmin = alliance.getLeaderId().equals(userId)
+        || alliance.getAdmins().stream().anyMatch(admin -> userId.equals(admin.getId()));
+
+    if (!isAllianceAdmin && (account.getUserId() == null || !account.getUserId().equals(userId))) {
+      throw new BusinessException("只有盟主、管理员或账号本人可以操作账号退出联盟");
     }
 
     // 处理南蛮分组关联（如果有的话）
@@ -320,24 +351,68 @@ public class AllianceMemberService {
     if (merged.getMemberTier() == null) {
       merged.setMemberTier(GameAccount.MemberTier.TIER_1);
     }
-    return gameAccountRepository.save(merged);
+    GameAccount saved = gameAccountRepository.save(merged);
+    clearAllianceApplications(saved.getId());
+    return saved;
   }
 
   public List<AllianceApplication> getPendingApplications(Long allianceId) {
     Long userId = UserContext.getUserId();
-    // 验证是否为盟主
+    // 验证是否为盟主或管理员
     Alliance alliance =
         allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!alliance.getLeaderId().equals(userId)) {
-      throw new BusinessException("只有盟主可以查看申请列表");
+    boolean isAllianceAdmin = alliance.getLeaderId().equals(userId)
+        || alliance.getAdmins().stream().anyMatch(admin -> userId.equals(admin.getId()));
+
+    if (!isAllianceAdmin) {
+      throw new BusinessException("只有盟主或管理员可以查看申请列表");
     }
 
     return applicationRepository.findByAllianceIdAndStatusOrderByCreatedAtAsc(
         allianceId, AllianceApplication.ApplicationStatus.PENDING);
   }
 
-  public List<AllianceApplication> getAccountApplications(Long accountId) {
+  @Transactional
+  public void cancelApplication(Long applicationId) {
+    Long userId = UserContext.getUserId();
+    AllianceApplication application =
+        applicationRepository
+            .findById(applicationId)
+            .orElseThrow(() -> new BusinessException("申请不存在"));
+
+    // 验证申请状态
+    if (application.getStatus() != AllianceApplication.ApplicationStatus.PENDING) {
+      throw new BusinessException("只能撤回待处理的申请");
+    }
+
+    // 验证申请人
+    GameAccount account =
+        gameAccountRepository
+            .findById(application.getAccountId())
+            .orElseThrow(() -> new BusinessException("游戏账号不存在"));
+
+    if (account.getUserId() == null || !account.getUserId().equals(userId)) {
+      throw new BusinessException("只能撤回自己的申请");
+    }
+
+    applicationRepository.delete(application);
+    log.info("用户 {} 撤回了账号 {} 对联盟 {} 的申请", userId, application.getAccountId(), application.getAllianceId());
+  }
+
+  public List<AllianceApplication> getApplicationsByAccount(Long accountId) {
+    Long userId = UserContext.getUserId();
+
+    // 验证账号是否存在且属于当前用户
+    GameAccount account =
+        gameAccountRepository
+            .findById(accountId)
+            .orElseThrow(() -> new BusinessException("游戏账号不存在"));
+
+    if (account.getUserId() == null || !account.getUserId().equals(userId)) {
+      throw new BusinessException("只能查看自己账号的申请记录");
+    }
+
     return applicationRepository.findByAccountIdOrderByCreatedAtDesc(accountId);
   }
 
@@ -453,10 +528,13 @@ public class AllianceMemberService {
     // 验证联盟存在
     Alliance alliance =
         allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
-    // 仅允许盟主进行批量更新
+    // 仅允许盟主或管理员进行批量更新
     Long userId = UserContext.getUserId();
-    if (!alliance.getLeaderId().equals(userId)) {
-      throw new BusinessException("只有盟主可以批量更新成员信息");
+    boolean isLeaderOrAdmin =
+        alliance.getLeaderId().equals(userId)
+            || alliance.getAdmins().stream().anyMatch(admin -> userId.equals(admin.getId()));
+    if (!isLeaderOrAdmin) {
+      throw new BusinessException("只有盟主或管理员可以批量更新成员信息");
     }
 
     String[] lines = rawText.split("\\r?\\n");
