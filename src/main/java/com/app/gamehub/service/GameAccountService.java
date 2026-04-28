@@ -304,6 +304,9 @@ public class GameAccountService {
     if (request.getLvbuStarLevel() != null) {
       account.setLvbuStarLevel(request.getLvbuStarLevel());
     }
+    if (request.getUserId() != null) {
+      account.setUserId(request.getUserId());
+    }
 
     return gameAccountRepository.save(account);
   }

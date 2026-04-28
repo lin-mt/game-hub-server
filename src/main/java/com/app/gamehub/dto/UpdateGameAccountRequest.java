@@ -59,4 +59,7 @@ public class UpdateGameAccountRequest {
 
   @Schema(description = "成员等级")
   private GameAccount.MemberTier memberTier;
+
+  @Schema(description = "用户 ID")
+  private Long userId;
 }
