@@ -163,8 +163,8 @@ public class WarService {
             .findById(application.getAllianceId())
             .orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!alliance.getLeaderId().equals(userId)) {
-      throw new BusinessException("只有盟主可以处理战事申请");
+    if (isNotAllianceLeaderOrAdmin(alliance)) {
+      throw new BusinessException("只有盟主或管理员可以处理战事申请");
     }
 
     // 验证申请状态
@@ -220,8 +220,8 @@ public class WarService {
     Alliance alliance =
         allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!alliance.getLeaderId().equals(userId)) {
-      throw new BusinessException("只有盟主可以查看战事申请列表");
+    if (isNotAllianceLeaderOrAdmin(alliance)) {
+      throw new BusinessException("只有盟主或管理员可以查看战事申请列表");
     }
 
     return warApplicationRepository.findByAllianceIdAndWarTypeAndStatusOrderByCreatedAtAsc(
@@ -405,12 +405,12 @@ public class WarService {
     return warArrangement;
   }
 
-  private boolean isAllianceLeaderOrAdmin(Alliance alliance) {
+  private boolean isNotAllianceLeaderOrAdmin(Alliance alliance) {
     Long currentUserId = UserContext.getUserId();
     if (currentUserId.equals(alliance.getLeaderId())) {
-      return true;
+      return false;
     }
-    return alliance.getAdmins().stream().anyMatch(admin -> currentUserId.equals(admin.getId()));
+    return alliance.getAdmins().stream().noneMatch(admin -> currentUserId.equals(admin.getId()));
   }
 
   @Transactional
@@ -424,7 +424,7 @@ public class WarService {
         allianceRepository
             .findById(account.getAllianceId())
             .orElseThrow(() -> new BusinessException("账号所在的联盟不存在"));
-    if (!isAllianceLeaderOrAdmin(alliance)) {
+    if (isNotAllianceLeaderOrAdmin(alliance)) {
       throw new BusinessException("只有盟主或管理员才能添加成员到战事中");
     }
 
@@ -511,8 +511,8 @@ public class WarService {
             .findById(account.getAllianceId())
             .orElseThrow(() -> new BusinessException("账号所在联盟不存在"));
     Long currentUserId = UserContext.getUserId();
-    if (!currentUserId.equals(alliance.getLeaderId())) {
-      throw new BusinessException("只有联盟盟主才能移除战事中的成员");
+    if (isNotAllianceLeaderOrAdmin(alliance)) {
+      throw new BusinessException("只有盟主或管理员才能移除战事中的成员");
     }
     log.info("用户：{} 从战事 {} 中移除账号 {}", currentUserId, warType, accountId);
     warArrangementRepository.deleteByAccountIdAndWarType(accountId, warType);
@@ -542,7 +542,7 @@ public class WarService {
     // 验证权限：只有盟主或管理员可以使用战术
     Alliance alliance =
         allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
-    if (!isAllianceLeaderOrAdmin(alliance)) {
+    if (isNotAllianceLeaderOrAdmin(alliance)) {
       throw new BusinessException("只有盟主或管理员可以使用战术");
     }
 
@@ -800,8 +800,8 @@ public class WarService {
         allianceRepository
             .findById(account.getAllianceId())
             .orElseThrow(() -> new BusinessException("联盟不存在"));
-    if (!Objects.equals(UserContext.getUserId(), alliance.getLeaderId())) {
-      throw new BusinessException("只有盟主可以修改成员身份");
+    if (isNotAllianceLeaderOrAdmin(alliance)) {
+      throw new BusinessException("只有盟主或管理员可以修改成员身份");
     }
 
     List<WarArrangement> arrangements =
