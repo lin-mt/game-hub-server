@@ -102,14 +102,22 @@ public class AllianceService {
     return allianceRepository.save(alliance);
   }
 
+  private boolean isNotAllianceLeaderOrAdmin(Alliance alliance) {
+    Long currentUserId = UserContext.getUserId();
+    if (currentUserId.equals(alliance.getLeaderId())) {
+      return false;
+    }
+    return alliance.getAdmins().stream().noneMatch(admin -> currentUserId.equals(admin.getId()));
+  }
+
   @Transactional
   public Alliance updateAlliance(Long allianceId, UpdateAllianceRequest request) {
     Alliance alliance =
         allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
 
     // 验证是否为盟主
-    if (!alliance.getLeaderId().equals(UserContext.getUserId())) {
-      throw new BusinessException("只有盟主可以更新联盟信息");
+    if (isNotAllianceLeaderOrAdmin(alliance)) {
+      throw new BusinessException("只有盟主或管理员可以更新联盟信息");
     }
 
     if (request.getName() != null && !request.getName().trim().isEmpty()) {
@@ -157,8 +165,8 @@ public class AllianceService {
             .orElseThrow(() -> new BusinessException("联盟不存在"));
 
     // 验证是否为盟主
-    if (!alliance.getLeaderId().equals(UserContext.getUserId())) {
-      throw new BusinessException("只有盟主可以更新联盟审核设置");
+    if (isNotAllianceLeaderOrAdmin(alliance)) {
+      throw new BusinessException("只有盟主或管理员可以更新联盟审核设置");
     }
 
     if (request.getAllianceJoinApprovalRequired() != null) {
@@ -187,8 +195,8 @@ public class AllianceService {
             .orElseThrow(() -> new BusinessException("联盟不存在"));
 
     // 验证是否为盟主
-    if (!alliance.getLeaderId().equals(UserContext.getUserId())) {
-      throw new BusinessException("只有盟主可以更新官渡战事人数上限");
+    if ( isNotAllianceLeaderOrAdmin(alliance)) {
+      throw new BusinessException("只有盟主或管理员可以更新官渡战事人数上限");
     }
 
     if (request.getGuanduOneMainLimit() != null) {
@@ -338,8 +346,8 @@ public class AllianceService {
         allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
 
     // 验证是否为盟主
-    if (!alliance.getLeaderId().equals(UserContext.getUserId())) {
-      throw new BusinessException("只有盟主可以设置官渡报名时间");
+    if (isNotAllianceLeaderOrAdmin(alliance)) {
+      throw new BusinessException("只有盟主或管理员可以设置官渡报名时间");
     }
 
     // 验证时间设置的合法性
@@ -370,8 +378,8 @@ public class AllianceService {
         allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
 
     // 验证是否为盟主
-    if (!alliance.getLeaderId().equals(UserContext.getUserId())) {
-      throw new BusinessException("只有盟主可以清除官渡报名时间设置");
+    if (isNotAllianceLeaderOrAdmin(alliance)) {
+      throw new BusinessException("只有盟主或管理员可以清除官渡报名时间设置");
     }
 
     alliance.setGuanduRegistrationStartDay(null);

@@ -80,14 +80,21 @@ public class QueryService {
     return warApplicationRepository.findByAccountIdOrderByCreatedAtDesc(accountId);
   }
 
+  private boolean isNotAllianceLeaderOrAdmin(Alliance alliance) {
+    Long currentUserId = UserContext.getUserId();
+    if (currentUserId.equals(alliance.getLeaderId())) {
+      return false;
+    }
+    return alliance.getAdmins().stream().noneMatch(admin -> currentUserId.equals(admin.getId()));
+  }
+
   public Map<String, List<WarApplication>> getAllianceWarApplications(Long allianceId) {
-    Long userId = UserContext.getUserId();
     // 验证是否为盟主
     Alliance alliance =
         allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!alliance.getLeaderId().equals(userId)) {
-      throw new BusinessException("只有盟主可以查看申请列表");
+    if(isNotAllianceLeaderOrAdmin(alliance)) {
+      throw new BusinessException("只有盟主或管理员可以查看申请列表");
     }
 
     Map<String, List<WarApplication>> result = new HashMap<>();

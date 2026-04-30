@@ -22,15 +22,13 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class AllianceServiceGuanduRegistrationTest {
 
+    private final Long testUserId = 1L;
+    private final Long testAllianceId = 1L;
     @Mock
     private AllianceRepository allianceRepository;
-
     @InjectMocks
     private AllianceService allianceService;
-
     private Alliance testAlliance;
-    private Long testUserId = 1L;
-    private Long testAllianceId = 1L;
 
     @BeforeEach
     void setUp() {
@@ -258,7 +256,7 @@ class AllianceServiceGuanduRegistrationTest {
             BusinessException exception = assertThrows(BusinessException.class, () -> {
                 allianceService.updateGuanduRegistrationTime(testAllianceId, request);
             });
-            assertEquals("只有盟主可以设置官渡报名时间", exception.getMessage());
+            assertEquals("只有盟主或管理员可以设置官渡报名时间", exception.getMessage());
         }
     }
 }
