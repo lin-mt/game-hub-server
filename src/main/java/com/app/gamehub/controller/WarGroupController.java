@@ -104,6 +104,13 @@ public class WarGroupController {
     return ApiResponse.success(response);
   }
 
+  @PostMapping("/auto-group")
+  @Operation(summary = "自动分组（攻城战事）")
+  public ApiResponse<Void> autoGroup(@Valid @RequestBody AutoGroupRequest request) {
+    warGroupService.autoGroup(request);
+    return ApiResponse.success("自动分组成功", null);
+  }
+
   @GetMapping("/accounts/{accountId}/arrangements")
   @Operation(summary = "获取账号的战事安排详情")
   public ApiResponse<AccountWarArrangementResponse> getAccountWarArrangements(

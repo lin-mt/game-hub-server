@@ -340,10 +340,10 @@ public class WarGroupService {
                   return null;
                 })
             .filter(Objects::nonNull)
-            .sorted(Comparator.comparing(
-                GameAccountWithApplicationTime::getApplicationTime,
-                Comparator.nullsFirst(Comparator.naturalOrder())
-            ))
+            .sorted(
+                Comparator.comparing(
+                    GameAccountWithApplicationTime::getApplicationTime,
+                    Comparator.nullsFirst(Comparator.naturalOrder())))
             .collect(Collectors.toList());
     response.setMobileMembers(mobileMembers);
 
@@ -372,10 +372,10 @@ public class WarGroupService {
                     return null;
                   })
               .filter(Objects::nonNull)
-              .sorted(Comparator.comparing(
-                  GameAccountWithApplicationTime::getApplicationTime,
-                  Comparator.nullsFirst(Comparator.naturalOrder())
-              ))
+              .sorted(
+                  Comparator.comparing(
+                      GameAccountWithApplicationTime::getApplicationTime,
+                      Comparator.nullsFirst(Comparator.naturalOrder())))
               .collect(Collectors.toList());
       groupDetail.setMembers(groupMembers);
 
@@ -384,6 +384,128 @@ public class WarGroupService {
     response.setWarGroups(warGroupDetails);
 
     return response;
+  }
+
+  @Transactional
+  public void autoGroup(AutoGroupRequest request) {
+    Long userId = UserContext.getUserId();
+    Long allianceId = request.getAllianceId();
+    WarType warType = request.getWarType();
+
+    // 验证权限
+    Alliance alliance =
+        allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
+
+    if (!isAllianceLeaderOrAdmin(alliance, userId)) {
+      throw new BusinessException("只有盟主或管理员可以执行自动分组");
+    }
+
+    // 获取成员详情
+    List<GameAccount> allMembers = gameAccountRepository.findByAllianceId(allianceId);
+
+    // 删除现有分组和安排（先删除安排再删除分组，避免外键约束）
+    warArrangementRepository.deleteByAllianceIdAndWarType(allianceId, warType);
+    warGroupRepository.deleteByAllianceIdAndWarType(allianceId, warType);
+
+    // 1. 按四维属性总和降序排列
+    allMembers.sort(
+        Comparator.comparingInt(
+                (GameAccount a) ->
+                    safeInt(a.getInfantryHp())
+                        + safeInt(a.getInfantryDefense())
+                        + safeInt(a.getArcherAttack())
+                        + safeInt(a.getArcherSiege()))
+            .reversed());
+
+    int totalLeaders = Math.min(request.getTotalLeaders(), allMembers.size());
+
+    // 选出车头（前 N 名）
+    List<GameAccount> leaders = new ArrayList<>(allMembers.subList(0, totalLeaders));
+
+    // 剩余成员按加成降序排列
+    List<GameAccount> remaining = new ArrayList<>();
+    if (allMembers.size() > totalLeaders) {
+      remaining = new ArrayList<>(allMembers.subList(totalLeaders, allMembers.size()));
+      remaining.sort(
+          Comparator.comparingDouble(
+                  (GameAccount a) ->
+                      a.getDamageBonus() != null ? a.getDamageBonus().doubleValue() : 0)
+              .reversed());
+    }
+
+    // 构建波次 -> 分组ID 映射
+    List<AutoGroupRequest.WaveConfig> waves = request.getWaves();
+    int leaderIdx = 0;
+    Map<Integer, List<Long>> waveToGroupIds = new LinkedHashMap<>();
+
+    for (AutoGroupRequest.WaveConfig wave : waves) {
+      List<Long> waveGroupIds = new ArrayList<>();
+      for (int i = 0; i < wave.getLeaderCount() && leaderIdx < leaders.size(); i++) {
+        GameAccount leader = leaders.get(leaderIdx++);
+
+        WarGroup warGroup = new WarGroup();
+        warGroup.setAllianceId(allianceId);
+        warGroup.setWarType(warType);
+        warGroup.setGroupName("第" + wave.getWaveIndex() + "波（车头：" + leader.getAccountName() + "）");
+        warGroup = warGroupRepository.save(warGroup);
+
+        waveGroupIds.add(warGroup.getId());
+
+        // 分配车头到分组
+        WarArrangement leaderArr = new WarArrangement();
+        leaderArr.setAccountId(leader.getId());
+        leaderArr.setAllianceId(allianceId);
+        leaderArr.setWarType(warType);
+        leaderArr.setWarGroupId(warGroup.getId());
+        leaderArr.setIsSubstitute(false);
+        warArrangementRepository.save(leaderArr);
+      }
+      waveToGroupIds.put(wave.getWaveIndex(), waveGroupIds);
+    }
+
+    // 按波次轮询分配剩余成员
+    int memberIdx = 0;
+    final int MAX_MEMBERS_PER_GROUP = 4;
+
+    for (AutoGroupRequest.WaveConfig wave : waves) {
+      List<Long> waveGroupIds = waveToGroupIds.get(wave.getWaveIndex());
+      if (waveGroupIds == null || waveGroupIds.isEmpty()) continue;
+
+      // 记录每组的当前成员数（车头已占 1 个位置）
+      Map<Long, Integer> groupCountMap = new HashMap<>();
+      for (Long gid : waveGroupIds) {
+        groupCountMap.put(gid, 1);
+      }
+
+      boolean assigned;
+      do {
+        assigned = false;
+        for (Long gid : waveGroupIds) {
+          if (memberIdx >= remaining.size()) break;
+          int currentCount = groupCountMap.get(gid);
+          if (currentCount < MAX_MEMBERS_PER_GROUP) {
+            GameAccount member = remaining.get(memberIdx++);
+
+            WarArrangement memberArr = new WarArrangement();
+            memberArr.setAccountId(member.getId());
+            memberArr.setAllianceId(allianceId);
+            memberArr.setWarType(warType);
+            memberArr.setWarGroupId(gid);
+            memberArr.setIsSubstitute(false);
+            warArrangementRepository.save(memberArr);
+
+            groupCountMap.put(gid, currentCount + 1);
+            assigned = true;
+          }
+        }
+      } while (assigned && memberIdx < remaining.size());
+
+      if (memberIdx >= remaining.size()) break;
+    }
+  }
+
+  private int safeInt(Integer value) {
+    return value != null ? value : 0;
   }
 
   public AccountWarArrangementResponse getAccountWarArrangements(Long accountId) {
