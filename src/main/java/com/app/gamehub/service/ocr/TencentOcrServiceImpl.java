@@ -113,7 +113,8 @@ public class TencentOcrServiceImpl implements OcrService {
         }
       }
 
-      throw new BusinessException("OCR所有服务都不可用: " + (lastException != null ? lastException.getMessage() : "未知错误"));
+      throw new BusinessException(
+          "OCR所有服务都不可用: " + (lastException != null ? lastException.getMessage() : "未知错误"));
     } finally {
       // 清理裁剪后的临时文件
       if (croppedFile != null && croppedFile.exists()) {

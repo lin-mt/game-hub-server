@@ -28,8 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class BaiduOcrServiceImpl implements OcrService {
 
   private static final String PROVIDER_NAME = "baidu";
-  private static final String API_KEY = "nzGHDeN4xeCRUZ1bcP9e6IRS";
-  private static final String SECRET_KEY = "qCdOvBFyEspvK8flT5T0BGLvspD5RQAf";
+  private static final String API_KEY = "";
+  private static final String SECRET_KEY = "";
 
   private static final OkHttpClient HTTP_CLIENT =
       new OkHttpClient().newBuilder().readTimeout(300, TimeUnit.SECONDS).build();
@@ -44,28 +44,6 @@ public class BaiduOcrServiceImpl implements OcrService {
   private long tokenExpireTime = 0;
 
   @Autowired private OcrQuotaRepository quotaRepository;
-
-  /** 百度OCR服务类型枚举 */
-  @Getter
-  public enum BaiduOcrServiceType {
-    GENERAL_BASIC("general_basic", "通用文字识别（标准版）", 1000, "/rest/2.0/ocr/v1/general_basic"),
-    GENERAL("general", "通用文字识别（标准含位置版）", 1000, "/rest/2.0/ocr/v1/general"),
-    ACCURATE_BASIC("accurate_basic", "通用文字识别（高精度版）", 1000, "/rest/2.0/ocr/v1/accurate_basic"),
-    ACCURATE("accurate", "通用文字识别（高精度含位置版）", 500, "/rest/2.0/ocr/v1/accurate"),
-    WEBIMAGE("webimage", "网络图片文字识别", 1000, "/rest/2.0/ocr/v1/webimage");
-
-    private final String code;
-    private final String name;
-    private final int monthlyQuota;
-    private final String apiPath;
-
-    BaiduOcrServiceType(String code, String name, int monthlyQuota, String apiPath) {
-      this.code = code;
-      this.name = name;
-      this.monthlyQuota = monthlyQuota;
-      this.apiPath = apiPath;
-    }
-  }
 
   @Override
   @Transactional
@@ -390,5 +368,27 @@ public class BaiduOcrServiceImpl implements OcrService {
     String currentMonth = java.time.YearMonth.now().toString();
     initMonthQuotas(currentMonth);
     return quotaRepository.findByProviderAndQuotaMonth(PROVIDER_NAME, currentMonth);
+  }
+
+  /** 百度OCR服务类型枚举 */
+  @Getter
+  public enum BaiduOcrServiceType {
+    GENERAL_BASIC("general_basic", "通用文字识别（标准版）", 1000, "/rest/2.0/ocr/v1/general_basic"),
+    GENERAL("general", "通用文字识别（标准含位置版）", 1000, "/rest/2.0/ocr/v1/general"),
+    ACCURATE_BASIC("accurate_basic", "通用文字识别（高精度版）", 1000, "/rest/2.0/ocr/v1/accurate_basic"),
+    ACCURATE("accurate", "通用文字识别（高精度含位置版）", 500, "/rest/2.0/ocr/v1/accurate"),
+    WEBIMAGE("webimage", "网络图片文字识别", 1000, "/rest/2.0/ocr/v1/webimage");
+
+    private final String code;
+    private final String name;
+    private final int monthlyQuota;
+    private final String apiPath;
+
+    BaiduOcrServiceType(String code, String name, int monthlyQuota, String apiPath) {
+      this.code = code;
+      this.name = name;
+      this.monthlyQuota = monthlyQuota;
+      this.apiPath = apiPath;
+    }
   }
 }

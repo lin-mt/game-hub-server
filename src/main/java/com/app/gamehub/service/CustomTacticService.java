@@ -101,11 +101,18 @@ public class CustomTacticService {
   private Alliance validateLeader(Long allianceId) {
     Alliance alliance =
         allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
-    Long userId = UserContext.getUserId();
-    if (userId == null || !userId.equals(alliance.getLeaderId())) {
-      throw new BusinessException("只有盟主可以管理自定义战术");
+    if (isNotAllianceLeaderOrAdmin(alliance)) {
+      throw new BusinessException("只有盟主或管理员可以管理自定义战术");
     }
     return alliance;
+  }
+
+  private boolean isNotAllianceLeaderOrAdmin(Alliance alliance) {
+    Long currentUserId = UserContext.getUserId();
+    if (currentUserId.equals(alliance.getLeaderId())) {
+      return false;
+    }
+    return alliance.getAdmins().stream().noneMatch(admin -> currentUserId.equals(admin.getId()));
   }
 
   private TacticTemplate getTemplateOrThrow(Long id) {
