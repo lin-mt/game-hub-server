@@ -465,7 +465,7 @@ public class WarGroupService {
 
     // 按波次轮询分配剩余成员
     int memberIdx = 0;
-    final int MAX_MEMBERS_PER_GROUP = 4;
+    final int MAX_MEMBERS_PER_GROUP = 5;
 
     for (AutoGroupRequest.WaveConfig wave : waves) {
       List<Long> waveGroupIds = waveToGroupIds.get(wave.getWaveIndex());
