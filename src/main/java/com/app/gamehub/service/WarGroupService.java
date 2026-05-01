@@ -433,10 +433,32 @@ public class WarGroupService {
               .reversed());
     }
 
-    // 构建波次 -> 分组ID 映射
+    // 根据分配方式执行
     List<AutoGroupRequest.WaveConfig> waves = request.getWaves();
+    AutoGroupRequest.AllocationMethod method = request.getAllocationMethod();
+    if (method == null) {
+      method = AutoGroupRequest.AllocationMethod.AVERAGE;
+    }
+
+    if (method == AutoGroupRequest.AllocationMethod.LEADER_PRIORITY) {
+      autoGroupLeaderPriority(waves, leaders, remaining, allianceId, warType);
+    } else {
+      autoGroupAverage(waves, leaders, remaining, allianceId, warType);
+    }
+  }
+
+  /** 平均分配：同波次内轮询分配车身成员，每个分组上限 5 人（1 车头 + 4 成员） */
+  private void autoGroupAverage(
+      List<AutoGroupRequest.WaveConfig> waves,
+      List<GameAccount> leaders,
+      List<GameAccount> remaining,
+      Long allianceId,
+      WarType warType) {
+
     int leaderIdx = 0;
+    final int MAX_MEMBERS_PER_GROUP = 5;
     Map<Integer, List<Long>> waveToGroupIds = new LinkedHashMap<>();
+    Map<Long, Integer> groupTotalBonus = new HashMap<>();
 
     for (AutoGroupRequest.WaveConfig wave : waves) {
       List<Long> waveGroupIds = new ArrayList<>();
@@ -459,13 +481,14 @@ public class WarGroupService {
         leaderArr.setWarGroupId(warGroup.getId());
         leaderArr.setIsSubstitute(false);
         warArrangementRepository.save(leaderArr);
+
+        groupTotalBonus.put(warGroup.getId(), 0);
       }
       waveToGroupIds.put(wave.getWaveIndex(), waveGroupIds);
     }
 
     // 按波次轮询分配剩余成员
     int memberIdx = 0;
-    final int MAX_MEMBERS_PER_GROUP = 5;
 
     for (AutoGroupRequest.WaveConfig wave : waves) {
       List<Long> waveGroupIds = waveToGroupIds.get(wave.getWaveIndex());
@@ -495,6 +518,7 @@ public class WarGroupService {
             warArrangementRepository.save(memberArr);
 
             groupCountMap.put(gid, currentCount + 1);
+            groupTotalBonus.merge(gid, (int) getDamageBonusValue(member), Integer::sum);
             assigned = true;
           }
         }
@@ -502,10 +526,79 @@ public class WarGroupService {
 
       if (memberIdx >= remaining.size()) break;
     }
+
+    // 更新分组名称加上总加成
+    for (Map.Entry<Long, Integer> entry : groupTotalBonus.entrySet()) {
+      WarGroup g = warGroupRepository.findById(entry.getKey()).orElse(null);
+      if (g != null) {
+        g.setGroupName(g.getGroupName() + "车身加成：" + entry.getValue());
+        warGroupRepository.save(g);
+      }
+    }
+  }
+
+  /** 大车头优先：四维属性越高的车头优先分配高加成车身成员。 按波次顺序，每波内车头按四维属性降序依次建组，每个组优先分配剩余成员中加成最高的，上限 5 人（1 车头 + 4 成员）。 */
+  private void autoGroupLeaderPriority(
+      List<AutoGroupRequest.WaveConfig> waves,
+      List<GameAccount> leaders,
+      List<GameAccount> remaining,
+      Long allianceId,
+      WarType warType) {
+
+    int leaderIdx = 0;
+    final int MAX_MEMBERS_PER_GROUP = 5;
+
+    for (AutoGroupRequest.WaveConfig wave : waves) {
+      for (int i = 0; i < wave.getLeaderCount() && leaderIdx < leaders.size(); i++) {
+        GameAccount leader = leaders.get(leaderIdx++);
+
+        WarGroup warGroup = new WarGroup();
+        warGroup.setAllianceId(allianceId);
+        warGroup.setWarType(warType);
+        warGroup.setGroupName("第" + wave.getWaveIndex() + "波（车头：" + leader.getAccountName() + "）");
+        warGroup = warGroupRepository.save(warGroup);
+
+        // 分配车头
+        WarArrangement leaderArr = new WarArrangement();
+        leaderArr.setAccountId(leader.getId());
+        leaderArr.setAllianceId(allianceId);
+        leaderArr.setWarType(warType);
+        leaderArr.setWarGroupId(warGroup.getId());
+        leaderArr.setIsSubstitute(false);
+        warArrangementRepository.save(leaderArr);
+
+        double totalBonus = 0;
+        int memberCount = 1;
+
+        // 从剩余成员中取加成最高的，填满本组（最多 4 个车身成员）
+        while (memberCount < MAX_MEMBERS_PER_GROUP && !remaining.isEmpty()) {
+          GameAccount member = remaining.removeFirst();
+
+          WarArrangement memberArr = new WarArrangement();
+          memberArr.setAccountId(member.getId());
+          memberArr.setAllianceId(allianceId);
+          memberArr.setWarType(warType);
+          memberArr.setWarGroupId(warGroup.getId());
+          memberArr.setIsSubstitute(false);
+          warArrangementRepository.save(memberArr);
+
+          totalBonus += getDamageBonusValue(member);
+          memberCount++;
+        }
+
+        // 更新分组名称加上总加成
+        warGroup.setGroupName(warGroup.getGroupName() + "车身加成：" + (int) totalBonus);
+        warGroupRepository.save(warGroup);
+      }
+    }
   }
 
   private int safeInt(Integer value) {
     return value != null ? value : 0;
+  }
+
+  private double getDamageBonusValue(GameAccount a) {
+    return a.getDamageBonus() != null ? a.getDamageBonus().doubleValue() : 0.0;
   }
 
   public AccountWarArrangementResponse getAccountWarArrangements(Long accountId) {
@@ -540,7 +633,7 @@ public class WarGroupService {
       List<WarArrangement> warTypeArrangements = entry.getValue();
 
       // 每个战事类型应该只有一个安排记录
-      WarArrangement arrangement = warTypeArrangements.get(0);
+      WarArrangement arrangement = warTypeArrangements.getFirst();
 
       AccountWarArrangementResponse.WarArrangementDetail detail =
           new AccountWarArrangementResponse.WarArrangementDetail();

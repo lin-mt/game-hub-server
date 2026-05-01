@@ -1,14 +1,14 @@
 package com.app.gamehub.task;
 
+import com.app.gamehub.entity.Alliance;
 import com.app.gamehub.entity.Dynasty;
 import com.app.gamehub.entity.DynastyPosition;
 import com.app.gamehub.entity.PositionReservation;
-import com.app.gamehub.entity.Alliance;
 import com.app.gamehub.entity.WarType;
+import com.app.gamehub.repository.AllianceRepository;
 import com.app.gamehub.repository.DynastyPositionRepository;
 import com.app.gamehub.repository.DynastyRepository;
 import com.app.gamehub.repository.PositionReservationRepository;
-import com.app.gamehub.repository.AllianceRepository;
 import com.app.gamehub.repository.WarApplicationRepository;
 import com.app.gamehub.repository.WarArrangementRepository;
 import com.app.gamehub.repository.WarGroupRepository;
@@ -44,7 +44,7 @@ public class SystemTask {
 
   /** 定时自动配置官职预约设置 - 每天凌晨3:00执行 */
   @Transactional
-  @Scheduled(cron = "0 0 3 * * ?")
+//  @Scheduled(cron = "0 0 3 * * ?")
   public void autoConfigurePositionReservation() {
     try {
       log.info("开始执行自动配置官职预约设置任务");
@@ -89,7 +89,7 @@ public class SystemTask {
   }
 
   /** 定时清理已结束预约活动的锁 每小时执行一次，清理结束时间在当前时间之前的预约活动对应的锁 */
-  @Scheduled(cron = "0 0 * * * ?")
+//  @Scheduled(cron = "0 0 * * * ?")
   public void cleanPositionReservationLock() {
     try {
       LocalDateTime now = LocalDateTime.now();
@@ -118,7 +118,7 @@ public class SystemTask {
 
   /** 定时清理王朝官职预约结果 */
   @Transactional
-  @Scheduled(cron = "0 0 3 * * ?")
+//  @Scheduled(cron = "0 0 3 * * ?")
   public void cleanDynastyPosition() {
     try {
       LocalDate localDate = LocalDate.now();

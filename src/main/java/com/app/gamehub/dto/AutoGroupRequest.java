@@ -28,6 +28,9 @@ public class AutoGroupRequest {
   @Schema(description = "总车头数（1～20）")
   private Integer totalLeaders;
 
+  @Schema(description = "车身分配方式（AVERAGE-平均分配, LEADER_PRIORITY-大车头优先），默认AVERAGE")
+  private AllocationMethod allocationMethod;
+
   @NotEmpty(message = "分波配置不能为空")
   @Valid
   @Schema(description = "分波配置列表")
@@ -43,5 +46,11 @@ public class AutoGroupRequest {
     @Min(value = 1, message = "每波车头数最少为1")
     @Schema(description = "该波的车头数")
     private Integer leaderCount;
+  }
+
+  @Schema(description = "车身分配方式")
+  public enum AllocationMethod {
+    AVERAGE,
+    LEADER_PRIORITY
   }
 }
