@@ -52,7 +52,7 @@ public class WarGroupService {
     Alliance alliance =
         allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!isAllianceLeaderOrAdmin(alliance, userId)) {
+    if (isNotAllianceLeaderOrAdmin(alliance, userId)) {
       throw new BusinessException("只有盟主或管理员可以创建战事分组");
     }
 
@@ -77,7 +77,7 @@ public class WarGroupService {
             .findById(warGroup.getAllianceId())
             .orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!isAllianceLeaderOrAdmin(alliance, userId)) {
+    if (isNotAllianceLeaderOrAdmin(alliance, userId)) {
       throw new BusinessException("只有盟主或管理员可以更新战事分组");
     }
 
@@ -103,7 +103,7 @@ public class WarGroupService {
             .findById(warGroup.getAllianceId())
             .orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!isAllianceLeaderOrAdmin(alliance, userId)) {
+    if (isNotAllianceLeaderOrAdmin(alliance, userId)) {
       throw new BusinessException("只有盟主或管理员可以删除战事分组");
     }
 
@@ -141,7 +141,7 @@ public class WarGroupService {
             .findById(account.getAllianceId())
             .orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!isAllianceLeaderOrAdmin(alliance, userId)) {
+    if (isNotAllianceLeaderOrAdmin(alliance, userId)) {
       throw new BusinessException("只有盟主或管理员可以安排成员");
     }
 
@@ -189,7 +189,7 @@ public class WarGroupService {
     Alliance alliance =
         allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!isAllianceLeaderOrAdmin(alliance, userId)) {
+    if (isNotAllianceLeaderOrAdmin(alliance, userId)) {
       throw new BusinessException("只有盟主或管理员可以清空战事安排");
     }
 
@@ -206,7 +206,7 @@ public class WarGroupService {
             .findById(request.getAllianceId())
             .orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!isAllianceLeaderOrAdmin(alliance, userId)) {
+    if (isNotAllianceLeaderOrAdmin(alliance, userId)) {
       throw new BusinessException("只有盟主或管理员可以清空战事安排");
     }
 
@@ -220,11 +220,11 @@ public class WarGroupService {
     }
   }
 
-  private boolean isAllianceLeaderOrAdmin(Alliance alliance, Long userId) {
+  private boolean isNotAllianceLeaderOrAdmin(Alliance alliance, Long userId) {
     if (userId.equals(alliance.getLeaderId())) {
-      return true;
+      return false;
     }
-    return alliance.getAdmins().stream().anyMatch(admin -> userId.equals(admin.getId()));
+    return alliance.getAdmins().stream().noneMatch(admin -> userId.equals(admin.getId()));
   }
 
   private void sendGuanduNotification(ClearWarArrangementsRequest request, Alliance alliance) {
@@ -396,7 +396,7 @@ public class WarGroupService {
     Alliance alliance =
         allianceRepository.findById(allianceId).orElseThrow(() -> new BusinessException("联盟不存在"));
 
-    if (!isAllianceLeaderOrAdmin(alliance, userId)) {
+    if (isNotAllianceLeaderOrAdmin(alliance, userId)) {
       throw new BusinessException("只有盟主或管理员可以执行自动分组");
     }
 
@@ -447,7 +447,7 @@ public class WarGroupService {
     }
   }
 
-  /** 平均分配：同波次内轮询分配车身成员，每个分组上限 5 人（1 车头 + 4 成员） */
+  /** 平均分配：同集结组次内轮询分配车身成员，每个分组上限 5 人（1 车头 + 4 成员） */
   private void autoGroupAverage(
       List<AutoGroupRequest.WaveConfig> waves,
       List<GameAccount> leaders,
@@ -468,7 +468,7 @@ public class WarGroupService {
         WarGroup warGroup = new WarGroup();
         warGroup.setAllianceId(allianceId);
         warGroup.setWarType(warType);
-        warGroup.setGroupName("第" + wave.getWaveIndex() + "波（车头：" + leader.getAccountName() + "）");
+        warGroup.setGroupName("第" + wave.getWaveIndex() + "组（车头：" + leader.getAccountName() + "）");
         warGroup = warGroupRepository.save(warGroup);
 
         waveGroupIds.add(warGroup.getId());
@@ -487,7 +487,7 @@ public class WarGroupService {
       waveToGroupIds.put(wave.getWaveIndex(), waveGroupIds);
     }
 
-    // 按波次轮询分配剩余成员
+    // 按集结组次轮询分配剩余成员
     int memberIdx = 0;
 
     for (AutoGroupRequest.WaveConfig wave : waves) {
@@ -527,7 +527,7 @@ public class WarGroupService {
       if (memberIdx >= remaining.size()) break;
     }
 
-    // 更新分组名称加上总加成
+    // 更新分组名称加上车身加成
     for (Map.Entry<Long, Integer> entry : groupTotalBonus.entrySet()) {
       WarGroup g = warGroupRepository.findById(entry.getKey()).orElse(null);
       if (g != null) {
@@ -537,7 +537,9 @@ public class WarGroupService {
     }
   }
 
-  /** 大车头优先：四维属性越高的车头优先分配高加成车身成员。 按波次顺序，每波内车头按四维属性降序依次建组，每个组优先分配剩余成员中加成最高的，上限 5 人（1 车头 + 4 成员）。 */
+  /**
+   * 大车头优先：四维属性越高的车头优先分配高加成车身成员。 按集结组次顺序，每组集结内车头按四维属性降序依次建组，每个组优先分配剩余成员中加成最高的，上限 5 人（1 车头 + 4 成员）。
+   */
   private void autoGroupLeaderPriority(
       List<AutoGroupRequest.WaveConfig> waves,
       List<GameAccount> leaders,
@@ -555,7 +557,7 @@ public class WarGroupService {
         WarGroup warGroup = new WarGroup();
         warGroup.setAllianceId(allianceId);
         warGroup.setWarType(warType);
-        warGroup.setGroupName("第" + wave.getWaveIndex() + "波（车头：" + leader.getAccountName() + "）");
+        warGroup.setGroupName("第" + wave.getWaveIndex() + "组（车头：" + leader.getAccountName() + "）");
         warGroup = warGroupRepository.save(warGroup);
 
         // 分配车头
@@ -586,7 +588,7 @@ public class WarGroupService {
           memberCount++;
         }
 
-        // 更新分组名称加上总加成
+        // 更新分组名称加上车身加成
         warGroup.setGroupName(warGroup.getGroupName() + "车身加成：" + (int) totalBonus);
         warGroupRepository.save(warGroup);
       }
